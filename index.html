@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cắt Kính">
+<title>Cắt Kính Tối Ưu</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273449; --accent:#38bdf8; --accent2:#22c55e;
+    --danger:#ef4444; --text:#e2e8f0; --muted:#94a3b8; --border:#334155;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:60px;}
+  header{position:sticky;top:0;background:var(--bg);z-index:10;padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  header h1{font-size:18px;margin:0;}
+  main{padding:12px;max-width:720px;margin:0 auto;}
+  .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  .card h2{font-size:15px;margin:0 0 10px;color:var(--accent);}
+  .row{display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;}
+  table{border-collapse:collapse;font-size:13px;width:100%;}
+  th,td{border-bottom:1px solid var(--border);padding:5px 4px;text-align:left;}
+  th{color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap;}
+  input,select{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 7px;font-size:14px;width:100%;}
+  input[type=number]{width:100%;}
+  input[type=checkbox]{width:auto;height:18px;width:18px;accent-color:var(--accent2);}
+  #demandTable{min-width:480px;}
+  #demandTable .col-code{width:110px;} #demandTable .col-num{width:80px;} #demandTable .col-qty{width:60px;}
+  #demandTable .col-th{width:70px;} #demandTable .col-del{width:40px;text-align:center;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:#04121c;border:none;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn.secondary{background:var(--card2);color:var(--text);border:1px solid var(--border);}
+  .btn.danger{background:var(--danger);color:#fff;}
+  .btn.small{padding:6px 10px;font-size:12px;border-radius:8px;}
+  .btn.block{width:100%;}
+  .btn.big{width:100%;padding:14px;font-size:16px;background:var(--accent2);color:#04240f;}
+  .del-btn{background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 6px;}
+  .muted{color:var(--muted);font-size:12px;}
+  .thumb{max-width:100%;border-radius:10px;margin:8px 0;border:1px solid var(--border);}
+  .sheet-block{background:var(--card2);border-radius:12px;padding:10px;margin-bottom:12px;}
+  .sheet-block h3{margin:0 0 6px;font-size:14px;}
+  .sheet-svg-wrap{width:100%;overflow:hidden;border-radius:8px;border:1px solid var(--border);background:#fff;}
+  .stat{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;}
+  .warn{background:#3a2a12;border:1px solid #7a5a1e;color:#fbbf24;border-radius:10px;padding:10px;font-size:13px;margin-bottom:10px;}
+  .err{background:#3a1414;border:1px solid #7a1e1e;color:#fca5a5;border-radius:10px;padding:10px;font-size:13px;margin-bottom:10px;}
+  .ok{background:#12321c;border:1px solid #1e7a3e;color:#86efac;border-radius:10px;padding:10px;font-size:13px;margin-bottom:10px;}
+  .list-item{border-bottom:1px solid var(--border);padding:6px 0;font-size:13px;}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .hidden{display:none !important;}
+  textarea.sizes{width:100%;min-height:34px;resize:vertical;}
+  .shrink-tag{color:#f59e0b;font-weight:600;}
+  .learn-box{line-height:1.6;}
+  @media print{
+    body{background:#fff;color:#111;padding-bottom:0;}
+    header, #globalMsg, main > .card, #btnOptimize, #btnPrintExport, #printHint { display:none !important; }
+    main{padding:0;max-width:100%;}
+    #resultsWrap .card{background:#fff;color:#111;box-shadow:none;border:1px solid #ccc;}
+    .sheet-block{background:#f8f9fa;border:1px solid #ccc;page-break-inside:avoid;margin-bottom:14px;}
+    .stat, .muted{color:#333;}
+    .shrink-tag{color:#b45309;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🪟 Cắt Kính Tối Ưu</h1>
+</header>
+
+<main>
+
+  <div id="globalMsg"></div>
+
+  <!-- API KEY -->
+  <div class="card">
+    <h2>1. Gemini API key</h2>
+    <p class="muted">Dùng để đọc số đo từ ảnh chụp giấy viết tay. Lấy miễn phí tại
+      <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a>,
+      dán vào ô bên dưới rồi bấm Lưu. Key chỉ lưu trên máy anh, không gửi cho ai khác ngoài Google.</p>
+    <div class="row">
+      <input type="text" id="apiKeyInput" placeholder="Dán Gemini API key vào đây" style="flex:1;">
+      <button class="btn" id="saveApiKey">Lưu</button>
+    </div>
+  </div>
+
+  <!-- LEARNING DATA -->
+  <div class="card">
+    <h2>2. Dữ liệu học của AI (đọc chữ càng ngày càng chính xác)</h2>
+    <div id="learningStatsBox" class="muted learn-box"></div>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn secondary small" id="btnExportLearning">⬇️ Sao lưu</button>
+      <button class="btn secondary small" id="btnImportLearning">⬆️ Nhập dữ liệu học (.json)</button>
+    </div>
+    <input type="file" id="importLearningFile" accept=".json" class="hidden">
+  </div>
+
+  <!-- STOCK TABLE -->
+  <div class="card">
+    <h2>3. Khổ kính nguyên liệu & quy định kính thừa</h2>
+    <table id="stockTable">
+      <thead><tr><th style="width:20%">Dày (mm)</th><th>Khổ có sẵn (mm) — cách nhau bởi dấu phẩy</th><th class="col-del"></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn secondary small" id="addStockRow" style="margin-top:8px;">+ Thêm độ dày</button>
+
+    <p class="muted" style="margin-top:14px;">Quy định phần kính thừa (ít khi phải sửa)</p>
+    <div class="row">
+      <label class="muted" style="flex:1;">Kính thừa GIỮ LẠI được khi cả 2 chiều ≥ (mm)</label>
+      <input type="number" id="minKeepInput" style="width:80px;">
+    </div>
+    <div class="row">
+      <label class="muted" style="flex:1;">Kính thừa BỎ ĐI được khi có 1 chiều ≤ (mm)</label>
+      <input type="number" id="maxTrashInput" style="width:80px;">
+    </div>
+    <div id="offcutRuleHint" class="muted"></div>
+  </div>
+
+  <!-- DEMAND INPUT -->
+  <div class="card">
+    <h2>4. Danh sách kính cần cắt (từ khổ nguyên)</h2>
+    <p class="muted">Chụp ảnh giấy viết tay hoặc bảng số đo kính in sẵn (chỉ chụp phần CHƯA bị loại bỏ / phần bắt buộc cắt từ kính nguyên khổ). Có thể chụp nhiều ảnh để gộp nhiều đợt / nhiều khổ. Mỗi ảnh cần nhập độ dày riêng ở ô bên dưới trước khi chụp.</p>
+
+    <div class="row">
+      <label class="muted" style="flex:1;">Dung sai cho phép hụt tối đa (mm) — áp dụng cho MỌI dòng (đặt 0 nếu không cho hụt)</label>
+      <input type="number" id="toleranceInput" style="width:70px;" value="4">
+    </div>
+
+    <div class="row">
+      <label class="muted" style="flex:1;">Độ dày kính (mm) cho ảnh sắp chụp — anh tự nhập, AI không tự đoán độ dày</label>
+      <input type="number" id="captureThicknessInput" style="width:70px;" placeholder="vd: 6">
+    </div>
+
+    <div class="row">
+      <button class="btn block" id="btnCamera">📷 Chụp / chọn ảnh giấy viết tay</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+    <img id="previewImg" class="thumb hidden">
+    <div id="ocrStatus"></div>
+
+    <div class="table-scroll">
+      <table id="demandTable" style="margin-top:10px;">
+        <thead><tr>
+          <th class="col-code">Mã</th><th class="col-num">Dài</th><th class="col-num">Rộng</th><th class="col-qty">SL</th><th class="col-th">Dày</th><th class="col-del"></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button class="btn secondary small" id="addDemandRow" style="margin-top:8px;">+ Thêm dòng thủ công</button>
+  </div>
+
+  <button class="btn big" id="btnOptimize">🔧 Tối ưu cắt</button>
+  <button class="btn secondary block hidden" id="btnPrintExport" style="margin-top:8px;">🖨️ Xuất PDF / In kết quả</button>
+  <p class="muted hidden" id="printHint" style="text-align:center;margin-top:6px;">Trên iPhone: ở màn hình xem trước, bấm vào ảnh xem trước để phóng to rồi bấm biểu tượng Chia sẻ để lưu thành PDF.</p>
+
+  <div id="resultsWrap"></div>
+
+</main>
+
+<script>
+/* ================= STORAGE ================= */
+const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash' };
+const DEFAULT_STOCK = [
+  {thickness:3,  sizes:[{w:1520,h:2140}]},
+  {thickness:4,  sizes:[{w:1520,h:2140},{w:1680,h:2140}]},
+  {thickness:5,  sizes:[{w:2130,h:3050},{w:1830,h:2440},{w:2400,h:3050}]},
+  {thickness:6,  sizes:[{w:2130,h:3050}]},
+  {thickness:8,  sizes:[{w:2130,h:3050}]},
+  {thickness:10, sizes:[{w:2130,h:3660},{w:2400,h:3660}]},
+  {thickness:12, sizes:[{w:2130,h:3660},{w:2440,h:3660}]},
+  {thickness:15, sizes:[{w:2130,h:3660}]},
+  {thickness:19, sizes:[{w:2130,h:3660}]},
+];
+
+function loadStock(){
+  try{ const raw = localStorage.getItem(LS_KEYS.stock); if(raw) return JSON.parse(raw); }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_STOCK));
+}
+function saveStock(){ localStorage.setItem(LS_KEYS.stock, JSON.stringify(state.stock)); }
+function loadDemand(){
+  try{ const raw = localStorage.getItem(LS_KEYS.demand); if(raw) return JSON.parse(raw); }catch(e){}
+  return [];
+}
+function saveDemand(){ localStorage.setItem(LS_KEYS.demand, JSON.stringify(state.demand)); }
+function loadApiKey(){ return localStorage.getItem(LS_KEYS.apiKey) || ''; }
+function saveApiKeyFn(k){ localStorage.setItem(LS_KEYS.apiKey, k); }
+function loadTolerance(){ const v = parseFloat(localStorage.getItem(LS_KEYS.tolerance)); return isNaN(v) ? 4 : v; }
+function saveTolerance(v){ localStorage.setItem(LS_KEYS.tolerance, String(v)); }
+function loadCaptureThickness(){ const v = parseFloat(localStorage.getItem(LS_KEYS.captureThickness)); return isNaN(v) ? '' : v; }
+function saveCaptureThickness(v){ localStorage.setItem(LS_KEYS.captureThickness, String(v)); }
+function loadMinKeep(){ const v = parseFloat(localStorage.getItem(LS_KEYS.minKeep)); return isNaN(v) ? 300 : v; }
+function saveMinKeep(v){ localStorage.setItem(LS_KEYS.minKeep, String(v)); }
+function loadMaxTrash(){ const v = parseFloat(localStorage.getItem(LS_KEYS.maxTrash)); return isNaN(v) ? 100 : v; }
+function saveMaxTrash(v){ localStorage.setItem(LS_KEYS.maxTrash, String(v)); }
+
+let state = {
+  stock: loadStock(),
+  demand: loadDemand(),
+  tolerance: loadTolerance(),
+  captureThickness: loadCaptureThickness(),
+  minKeep: loadMinKeep(),
+  maxTrash: loadMaxTrash(),
+  learning: null,
+  nextId: 1,
+  nextBatchId: 1
+};
+state.demand.forEach(d=>{
+  if(d.id>=state.nextId) state.nextId = d.id+1;
+  if(d.ghichu===undefined) d.ghichu='';
+});
+
+/* ================= LEARNING ENGINE (ported from GlassAI desktop app) ================= */
+const LEARN_MAX_FEWSHOT = 5;
+const LEARN_MAX_HISTORY = 500;
+const LEARN_PATTERN_THRESHOLD = 3;
+
+function defaultLearningDB(){
+  return {
+    version: 1,
+    stats: { total_images:0, total_items:0, corrections:0, accuracy_rate:100.0 },
+    correction_history: [],
+    common_patterns: [],
+    writer_profiles: { default: { handwriting_notes:'', total_processed:0 } }
+  };
+}
+function loadLearningDB(){
+  try{ const raw = localStorage.getItem(LS_KEYS.learning); if(raw) return JSON.parse(raw); }catch(e){}
+  return defaultLearningDB();
+}
+function saveLearningDB(){ localStorage.setItem(LS_KEYS.learning, JSON.stringify(state.learning)); }
+
+function learningGenerateLesson(diffs){
+  const lessons = [];
+  for(const key in diffs){
+    const {ai, correct} = diffs[key];
+    if(key==='dai' || key==='rong'){
+      lessons.push(`Kích thước ${key}: AI đọc ${ai} nhưng đúng là ${correct}`);
+    } else if(key==='so_luong'){
+      lessons.push(`Số lượng: AI đọc ${ai} nhưng đúng là ${correct} (số ${correct} viết tay dễ nhầm với ${ai})`);
+    } else if(key==='loai_kinh'){
+      lessons.push(`Ghi chú/loại kính: đúng là '${correct}' (AI đọc '${ai}')`);
+    } else if(key==='do_kinh'){
+      lessons.push(`Độ dày: đúng là '${correct}' (AI đọc '${ai}')`);
+    }
+  }
+  return lessons.join('; ');
+}
+
+function learningFindCorrections(aiRows, finalRows){
+  const corrections = [];
+  finalRows.forEach((final, i)=>{
+    const ai = aiRows[i];
+    if(!ai) return;
+    const diffs = {};
+    ['dai','rong','so_luong'].forEach(k=>{
+      const a = ai[k] ?? 0, f = final[k] ?? 0;
+      if(a !== f) diffs[k] = {ai:a, correct:f};
+    });
+    ['loai_kinh'].forEach(k=>{
+      const a = String(ai[k] ?? '').trim(), f = String(final[k] ?? '').trim();
+      if(a !== f && f) diffs[k] = {ai:a, correct:f};
+    });
+    if(Object.keys(diffs).length){
+      corrections.push({
+        ai_read: {dai:ai.dai, rong:ai.rong, so_luong:ai.so_luong, loai_kinh:ai.loai_kinh, do_kinh:ai.do_kinh},
+        user_corrected: {dai:final.dai, rong:final.rong, so_luong:final.so_luong, loai_kinh:final.loai_kinh, do_kinh:final.do_kinh},
+        error_type: Object.keys(diffs).join(', '),
+        lesson: learningGenerateLesson(diffs)
+      });
+    }
+  });
+  return corrections;
+}
+
+function learningCreateRule(errorType, history){
+  const examples = history.filter(h=>h.error_type===errorType).map(h=>[h.ai_read||{}, h.user_corrected||{}]);
+  if(!examples.length) return `Kiểm tra kỹ ${errorType}`;
+  if(errorType.includes('so_luong')){
+    const aiVals = examples.map(e=>e[0].so_luong||0);
+    const okVals = examples.map(e=>e[1].so_luong||0);
+    if(aiVals.every((a,i)=>a>okVals[i])) return 'AI có xu hướng đọc số lượng CAO hơn thực tế → ưu tiên số nhỏ hơn';
+    if(aiVals.every((a,i)=>a<okVals[i])) return 'AI có xu hướng đọc số lượng THẤP hơn thực tế → ưu tiên số lớn hơn';
+  }
+  if(errorType.includes('dai') || errorType.includes('rong')){
+    return 'Kiểm tra kỹ kích thước — chữ viết tay dễ nhầm một số chữ số';
+  }
+  return `Chú ý trường ${errorType} — thường hay bị đọc sai`;
+}
+
+function learningAnalyzePatterns(db){
+  const history = db.correction_history;
+  if(history.length < LEARN_PATTERN_THRESHOLD){ db.common_patterns = []; return; }
+  const counter = {}, examples = {};
+  history.forEach(c=>{
+    const et = c.error_type || '';
+    if(!et) return;
+    counter[et] = (counter[et]||0) + 1;
+    examples[et] = c.lesson || '';
+  });
+  const entries = Object.entries(counter).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const patterns = [];
+  entries.forEach(([et,count])=>{
+    if(count >= LEARN_PATTERN_THRESHOLD){
+      patterns.push({ pattern: examples[et]||et, frequency:count, error_type:et, correction_rule: learningCreateRule(et, history) });
+    }
+  });
+  db.common_patterns = patterns;
+}
+
+function learningRecordBatch(aiRows, finalRows, imageLabel){
+  const db = state.learning;
+  db.stats.total_images += 1;
+  db.stats.total_items += finalRows.length;
+  const corrections = learningFindCorrections(aiRows, finalRows);
+  corrections.forEach(c=>{
+    c.timestamp = new Date().toISOString();
+    c.image = imageLabel || 'ảnh';
+    db.correction_history.push(c);
+    db.stats.corrections += 1;
+  });
+  db.stats.accuracy_rate = db.stats.total_items>0
+    ? Math.round((1 - db.stats.corrections/Math.max(db.stats.total_items,1)) * 1000) / 10
+    : 100;
+  if(db.correction_history.length > LEARN_MAX_HISTORY) db.correction_history = db.correction_history.slice(-LEARN_MAX_HISTORY);
+  db.writer_profiles.default.total_processed = db.stats.total_images;
+  learningAnalyzePatterns(db);
+  saveLearningDB();
+}
+
+function learningGetContext(){
+  const db = state.learning;
+  const parts = [];
+  const recent = db.correction_history.slice(-LEARN_MAX_FEWSHOT);
+  if(recent.length){
+    parts.push('VÍ DỤ ĐÃ HỌC TỪ NHỮNG LẦN ĐỌC TRƯỚC (rất quan trọng, tránh lặp lỗi):');
+    recent.forEach(c=>{
+      const ai = c.ai_read||{}, ok = c.user_corrected||{};
+      parts.push(`- Ảnh "${c.image||'ảnh'}": AI đọc sai (${ai.dai??'?'}x${ai.rong??'?'}=${ai.so_luong??'?'}) → Đúng là (${ok.dai??'?'}x${ok.rong??'?'}=${ok.so_luong??'?'})`);
+      if(c.lesson) parts.push(`  Bài học: ${c.lesson}`);
+    });
+  }
+  const patterns = db.common_patterns || [];
+  if(patterns.length){
+    parts.push('');
+    parts.push('LỖI PHỔ BIẾN CẦN TRÁNH (đã xảy ra nhiều lần):');
+    patterns.slice(0,5).forEach(p=>{
+      parts.push(`- ${p.pattern} (đã xảy ra ${p.frequency} lần)`);
+      if(p.correction_rule) parts.push(`  → Quy tắc: ${p.correction_rule}`);
+    });
+  }
+  const notes = db.writer_profiles?.default?.handwriting_notes;
+  if(notes){
+    parts.push('');
+    parts.push(`ĐẶC ĐIỂM CHỮ VIẾT TAY CỦA NGƯỜI NÀY: ${notes}`);
+  }
+  return parts.join('\n');
+}
+
+function learningGetStats(){
+  const db = state.learning;
+  const total = db.stats.total_images, corr = db.stats.corrections;
+  let level = 'L0 — Chưa có dữ liệu học';
+  if(total>=50 && corr>=10) level = 'L3 — Đã nhận diện phong cách chữ viết';
+  else if(corr>=3) level = 'L2 — Đã phát hiện lỗi lặp lại';
+  else if(corr>=1) level = 'L1 — Đang học từ ví dụ sửa lỗi';
+  return { ...db.stats, level, patterns: db.common_patterns||[] };
+}
+
+function renderLearningStats(){
+  const s = learningGetStats();
+  const topPatterns = (s.patterns||[]).slice(0,3).map(p=>`• ${p.pattern} (${p.frequency} lần)`).join('<br>');
+  document.getElementById('learningStatsBox').innerHTML =
+    `Cấp độ học: <b>${s.level}</b><br>` +
+    `Đã xử lý ${s.total_images} ảnh, ${s.total_items} dòng, sửa ${s.corrections} lần — độ chính xác ước tính ${s.accuracy_rate}%` +
+    (topPatterns ? `<br><br>Lỗi hay gặp nhất:<br>${topPatterns}` : '');
+}
+
+function simpleHash(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+  return h.toString(36) + '_' + str.length;
+}
+
+function mergeLearningImport(incoming){
+  const db = state.learning;
+  const incomingHistory = Array.isArray(incoming.correction_history) ? incoming.correction_history : [];
+  if(incomingHistory.length === 0){ showMsg('warn', 'File không có dữ liệu học nào để nhập.'); return; }
+
+  // Entries in the history don't have a unique id, and identical corrections can
+  // legitimately repeat many times (e.g. the same "kính trong" fix on 30 different
+  // pieces) — so we can't de-duplicate entry-by-entry without silently dropping
+  // real data. Instead we fingerprint the whole imported batch and only skip if
+  // this EXACT file was already imported before.
+  if(!db.imported_sources) db.imported_sources = [];
+  const fingerprint = simpleHash(JSON.stringify(incomingHistory));
+  if(db.imported_sources.includes(fingerprint)){
+    showMsg('warn', 'File này đã được nhập trước đó rồi — không nhập lại để tránh tính trùng.');
+    return;
+  }
+  db.imported_sources.push(fingerprint);
+
+  incomingHistory.forEach(c=> db.correction_history.push(c));
+  if(db.correction_history.length > LEARN_MAX_HISTORY) db.correction_history = db.correction_history.slice(-LEARN_MAX_HISTORY);
+  db.stats.total_images += incoming.stats?.total_images || 0;
+  db.stats.total_items += incoming.stats?.total_items || 0;
+  db.stats.corrections = db.correction_history.length;
+  db.stats.accuracy_rate = db.stats.total_items>0
+    ? Math.round((1 - db.stats.corrections/Math.max(db.stats.total_items,1)) * 1000) / 10
+    : 100;
+  if(incoming.writer_profiles?.default?.handwriting_notes){
+    db.writer_profiles.default.handwriting_notes = incoming.writer_profiles.default.handwriting_notes;
+  }
+  learningAnalyzePatterns(db);
+  saveLearningDB();
+  renderLearningStats();
+  showMsg('ok', `Đã nhập thêm ${incomingHistory.length} ví dụ học (tổng hiện tại: ${db.correction_history.length}).`);
+}
+
+document.getElementById('btnExportLearning').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(state.learning, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `hoc_AI_backup_${ts}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('btnImportLearning').addEventListener('click', ()=> document.getElementById('importLearningFile').click());
+document.getElementById('importLearningFile').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{ mergeLearningImport(JSON.parse(reader.result)); }
+    catch(err){ showMsg('warn', 'File không hợp lệ: '+err.message); }
+  };
+  reader.readAsText(file);
+});
+
+/* ================= API KEY UI ================= */
+document.getElementById('apiKeyInput').value = loadApiKey();
+document.getElementById('saveApiKey').addEventListener('click', ()=>{
+  saveApiKeyFn(document.getElementById('apiKeyInput').value.trim());
+  showMsg('ok', 'Đã lưu API key.');
+});
+
+/* ================= TOLERANCE UI ================= */
+document.getElementById('toleranceInput').value = state.tolerance;
+document.getElementById('toleranceInput').addEventListener('change', e=>{
+  state.tolerance = parseFloat(e.target.value)||0;
+  saveTolerance(state.tolerance);
+});
+
+/* ================= OFFCUT RULES (a/b) UI ================= */
+function renderOffcutRuleHint(){
+  const el = document.getElementById('offcutRuleHint');
+  if(!el) return;
+  const {minKeep, maxTrash} = state;
+  if(maxTrash >= minKeep){
+    el.innerHTML = `<span style="color:#fbbf24">Lưu ý: số "bỏ đi" nên NHỎ HƠN số "giữ lại". Hiện tại không có vùng khó dùng nào.</span>`;
+  } else {
+    el.textContent = `Phần thừa có chiều nhỏ nhất trong khoảng ${maxTrash}–${minKeep}mm là "khó dùng" — phần mềm sẽ cố tránh tạo ra loại này.`;
+  }
+}
+document.getElementById('minKeepInput').value = state.minKeep;
+document.getElementById('minKeepInput').addEventListener('change', e=>{
+  state.minKeep = Math.max(0, parseFloat(e.target.value)||0);
+  saveMinKeep(state.minKeep);
+  renderOffcutRuleHint();
+});
+document.getElementById('maxTrashInput').value = state.maxTrash;
+document.getElementById('maxTrashInput').addEventListener('change', e=>{
+  state.maxTrash = Math.max(0, parseFloat(e.target.value)||0);
+  saveMaxTrash(state.maxTrash);
+  renderOffcutRuleHint();
+});
+
+document.getElementById('captureThicknessInput').value = state.captureThickness;
+document.getElementById('captureThicknessInput').addEventListener('change', e=>{
+  const v = parseFloat(e.target.value);
+  state.captureThickness = isNaN(v) ? '' : v;
+  saveCaptureThickness(state.captureThickness);
+});
+
+/* ================= STOCK TABLE UI ================= */
+function sizesToText(sizes){ return sizes.map(s=>`${s.w}x${s.h}`).join(', '); }
+function textToSizes(txt){
+  return txt.split(',').map(s=>s.trim()).filter(Boolean).map(s=>{
+    const m = s.toLowerCase().match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/);
+    if(!m) return null;
+    return {w:parseFloat(m[1]), h:parseFloat(m[2])};
+  }).filter(Boolean);
+}
+
+function renderStockTable(){
+  const tbody = document.querySelector('#stockTable tbody');
+  tbody.innerHTML = '';
+  state.stock.forEach((row, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="number" data-idx="${idx}" class="stock-thickness" value="${row.thickness}"></td>
+      <td><textarea class="sizes" data-idx="${idx}">${sizesToText(row.sizes)}</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="${idx}">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.stock-thickness').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      state.stock[e.target.dataset.idx].thickness = parseFloat(e.target.value)||0;
+      saveStock();
+    });
+  });
+  tbody.querySelectorAll('textarea.sizes').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      state.stock[e.target.dataset.idx].sizes = textToSizes(e.target.value);
+      saveStock();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      state.stock.splice(e.target.dataset.idx,1);
+      saveStock(); renderStockTable();
+    });
+  });
+}
+document.getElementById('addStockRow').addEventListener('click', ()=>{
+  state.stock.push({thickness:0, sizes:[]});
+  saveStock(); renderStockTable();
+});
+
+/* ================= DEMAND TABLE UI ================= */
+function renderDemandTable(){
+  const tbody = document.querySelector('#demandTable tbody');
+  tbody.innerHTML = '';
+  state.demand.forEach((row)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-id="${row.id}" data-f="code" value="${row.code ?? ''}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="w" value="${row.w ?? ''}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="h" value="${row.h ?? ''}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="qty" value="${row.qty ?? 1}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="thickness" value="${row.thickness ?? ''}"></td>
+      <td class="col-del"><button class="del-btn" data-id="${row.id}">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input[type=text],input[type=number]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const id = parseInt(e.target.dataset.id);
+      const row = state.demand.find(d=>d.id===id);
+      const f = e.target.dataset.f;
+      row[f] = (f==='code' || f==='ghichu') ? e.target.value : parseFloat(e.target.value)||0;
+      saveDemand();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = parseInt(e.target.dataset.id);
+      state.demand = state.demand.filter(d=>d.id!==id);
+      saveDemand(); renderDemandTable();
+    });
+  });
+}
+document.getElementById('addDemandRow').addEventListener('click', ()=>{
+  state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness: state.stock[0]?.thickness || '', ghichu:''});
+  saveDemand(); renderDemandTable();
+});
+
+function showMsg(type, text){
+  const el = document.getElementById('globalMsg');
+  el.innerHTML = `<div class="${type}">${text}</div>`;
+  setTimeout(()=>{ if(el.innerHTML.includes(text)) el.innerHTML=''; }, 6000);
+}
+
+/* ================= CAMERA + GEMINI OCR ================= */
+document.getElementById('btnCamera').addEventListener('click', ()=>{
+  const key = loadApiKey();
+  if(!key){ showMsg('warn','Chưa có Gemini API key. Dán vào mục 1 ở trên rồi bấm Lưu.'); return; }
+  if(!state.captureThickness || state.captureThickness<=0){ showMsg('warn','Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay trên nút chụp rồi thử lại.'); return; }
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const previewImg = document.getElementById('previewImg');
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    previewImg.src = reader.result;
+    previewImg.classList.remove('hidden');
+    const base64 = reader.result.split(',')[1];
+    await runOCR(base64, file.type || 'image/jpeg', file.name || 'ảnh');
+  };
+  reader.readAsDataURL(file);
+});
+
+function buildPrompt(learningContext){
+  return `Bạn là hệ thống AI chuyên đọc đơn đặt kính từ ảnh — có thể là giấy viết tay, hoặc bảng số đo kính in sẵn từ phần mềm có đánh dấu tay lên trên (đơn vị mm, tiếng Việt).
+
+NHIỆM VỤ: Đọc TOÀN BỘ các dòng kích thước kính CÒN NGUYÊN (chưa bị loại bỏ) trong ảnh, trả về JSON chính xác.
+
+ĐỊNH DẠNG VIẾT TAY THƯỜNG GẶP:
+- "số x số = số" hoặc "số * số = số" → dài x rộng = số lượng
+- Số đầu tiên là chiều dài (dai), số thứ hai là chiều rộng (rong), sau dấu "=" là số lượng
+- Ngoặc nhọn/móc gom nhiều dòng lại → tất cả dòng trong nhóm đó dùng chung màu kính/ghi chú
+- Ghi chú hay gặp: màu/loại kính (trắng, xám khói, xanh đen, kính sữa, kính trong, gương, phản quang...), yêu cầu mài cạnh (mài 1 cạnh, mài 2 cạnh, không mài, vát, mỏ vịt...)
+
+ĐỊNH DẠNG BẢNG IN SẴN THƯỜNG GẶP (bảng số đo kính in từ phần mềm):
+- Có các cột: #, Ký hiệu, Dài (mm), Rộng (mm), SL, Loại kính, Độ dày
+- Cột "Ký hiệu" nếu có dạng "1)", "2)"... thì lấy làm mã (code) của dòng đó
+
+${learningContext}
+
+QUY TẮC BẮT BUỘC:
+1. Đọc TẤT CẢ các dòng có kích thước, TUYỆT ĐỐI KHÔNG bỏ sót dòng nào
+2. BỎ QUA hoàn toàn các dòng đã bị loại bỏ, dù đánh dấu bằng cách nào trong 2 kiểu sau:
+   - Trên giấy viết tay: dòng bị gạch chéo / gạch bỏ / viết đè lên
+   - Trên bảng in sẵn: có một đường kẻ tay (thường bút bi xanh hoặc đen) vẽ ngang qua TOÀN BỘ hàng đó
+3. Kích thước là số nguyên (mm), thường trong khoảng 100-3000mm — cẩn thận chữ số viết tay dễ nhầm (ví dụ 24 với 204, 42 với 482)
+4. Số lượng là số nguyên dương, mặc định 1 nếu không ghi rõ
+5. Nếu thấy chữ dạng "Xly" (ví dụ 5ly, 8ly, 6.38ly...) trên giấy viết tay, đó là ĐỘ DÀY kính — TUYỆT ĐỐI KHÔNG đưa số này vào trường w hoặc h. KHÔNG cần đọc/trả về độ dày, vì độ dày sẽ do người dùng tự nhập riêng.
+6. Nếu không chắc chắn, vẫn đọc theo phỏng đoán hợp lý nhất, không bỏ sót dòng
+7. CHỈ trả về mảng JSON, KHÔNG viết thêm giải thích, không dùng markdown
+
+Mỗi phần tử JSON có dạng:
+{"code": "mã/ký hiệu nếu có, không thì để rỗng", "w": số (dài, mm), "h": số (rộng, mm), "qty": số lượng, "ghichu": "màu kính / loại kính / yêu cầu mài cạnh nếu có, không thì để rỗng"}`;
+}
+
+async function runOCR(base64, mimeType, imageLabel){
+  const statusEl = document.getElementById('ocrStatus');
+  statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Đang đọc số đo từ ảnh...</div>`;
+  const apiKey = loadApiKey();
+  const learningContext = learningGetContext();
+  const prompt = buildPrompt(learningContext);
+
+  try{
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type: mimeType, data: base64}} ] }],
+        generationConfig:{ responseMimeType:'application/json' }
+      })
+    });
+    const data = await resp.json();
+    if(!resp.ok){
+      throw new Error(data?.error?.message || 'Lỗi gọi Gemini API');
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!text) throw new Error('Không nhận được kết quả từ Gemini.');
+    let cleaned = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'');
+    const arr = JSON.parse(cleaned);
+    if(!Array.isArray(arr) || arr.length===0){
+      statusEl.innerHTML = `<div class="warn">Không đọc được dòng nào. Thử chụp lại ảnh rõ hơn.</div>`;
+      return;
+    }
+    const batchId = state.nextBatchId++;
+    const thickness = state.captureThickness || 0;
+    arr.forEach(item=>{
+      const w = parseFloat(item.w)||0, h = parseFloat(item.h)||0;
+      const qty = parseInt(item.qty)||1;
+      const ghichu = String(item.ghichu || '').trim();
+      state.demand.push({
+        id: state.nextId++,
+        code: item.code || '',
+        w, h, qty, thickness, ghichu,
+        _ocrBatch: batchId,
+        _ocrSnapshot: { dai:w, rong:h, so_luong:qty, loai_kinh:ghichu, do_kinh:thickness },
+        _recorded: false
+      });
+    });
+    saveDemand();
+    renderDemandTable();
+    statusEl.innerHTML = `<div class="ok">Đã đọc thêm ${arr.length} dòng. Kiểm tra lại bảng bên dưới, sửa nếu cần — mỗi chỗ anh sửa sẽ giúp AI đọc chính xác hơn ở lần sau.</div>`;
+  }catch(err){
+    statusEl.innerHTML = `<div class="err">Lỗi: ${err.message}</div>`;
+  }
+}
+
+/* ================= PACKING ALGORITHM ================= */
+const OFFCUT_EPS = 0.05;
+function round1(v){ return Math.round(v*10)/10; }
+
+// classifyOffcut: an offcut is "keep" only if BOTH dims >= minKeep, "trash" if
+// EITHER dim <= maxTrash, otherwise it's stuck in the "dead" zone (too big to
+// throw away, too small to be useful) — which the packer tries to avoid.
+// Because keep <=> min(w,h)>=minKeep and trash <=> min(w,h)<=maxTrash, the
+// whole rule reduces to a test on the smaller dimension.
+function classifyOffcut(w, h, rules){
+  const m = Math.min(w, h);
+  if (m <= OFFCUT_EPS) return 'none';
+  if (m >= rules.minKeep - OFFCUT_EPS) return 'keep';
+  if (m <= rules.maxTrash + OFFCUT_EPS) return 'trash';
+  return 'dead';
+}
+
+// fitDim: returns the size to actually cut (<=req), or null if it doesn't fit even with allowed shrink.
+// Every piece is allowed to shrink now (no more per-row "Được hụt" checkbox) — tol=0 disables shrinking entirely.
+function fitDim(req, avail, tol){
+  if(avail >= req) return req;
+  if(avail >= req - tol) return avail;
+  return null;
+}
+
+function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
+  let uid = 1;
+  let items = [];
+  pieces.forEach(p => {
+    for (let i = 0; i < p.qty; i++) items.push({ id: uid++, code: p.code, w: p.w, h: p.h });
+  });
+  items.forEach(it => { if (it.h > it.w) { const t = it.w; it.w = it.h; it.h = t; } });
+  if (cfg.sortKey === 'area') items.sort((a, b) => (b.w*b.h) - (a.w*a.h) || b.h - a.h);
+  else if (cfg.sortKey === 'w') items.sort((a, b) => b.w - a.w || b.h - a.h);
+  else items.sort((a, b) => b.h - a.h || b.w - a.w);
+
+  const S_SHRINK = 1e7, S_DEAD = 1e4; // shrink dominates dead-zone avoidance, which dominates tight-fit
+
+  let sheets = [], unplaced = [];
+
+  function findBestPlacement(it) {
+    let best = null;
+    sheets.forEach((sheet, si) => {
+      sheet.shelves.forEach((shelf, hi) => {
+        const availW = sheet.stock.w - shelf.usedWidth;
+        const availH = shelf.height;
+        [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
+          const fw = fitDim(w, availW, tolerance);
+          const fh = fitDim(h, availH, tolerance);
+          if (fw == null || fh == null) return;
+          const shrink = (w - fw) + (h - fh);
+          const leftover = availH - fh;
+          const remWAfter = round1(availW - fw);
+          const dead = cfg.deadWeight
+            ? (classifyOffcut(remWAfter, shelf.height, rules) === 'dead' ? 1 : 0)
+            : 0;
+          const score = shrink * S_SHRINK + dead * S_DEAD + leftover;
+          if (!best || score < best.score) best = { type: 'shelf', si, hi, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
+        });
+      });
+      const usedHeight = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
+      const availH2 = sheet.stock.h - usedHeight;
+      const availW2 = sheet.stock.w;
+      [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
+        const fw = fitDim(w, availW2, tolerance);
+        const fh = fitDim(h, availH2, tolerance);
+        if (fw == null || fh == null) return;
+        const shrink = (w - fw) + (h - fh);
+        const leftover = (availH2 - fh) + 1; // tiny penalty vs using an existing shelf
+        const remWAfter = round1(availW2 - fw);
+        const bandAfter = round1(availH2 - fh);
+        const dead = cfg.deadWeight
+          ? (classifyOffcut(remWAfter, fh, rules) === 'dead' ? 1 : 0)
+            + (classifyOffcut(sheet.stock.w, bandAfter, rules) === 'dead' ? 1 : 0)
+          : 0;
+        const score = shrink * S_SHRINK + dead * S_DEAD + leftover;
+        if (!best || score < best.score) best = { type: 'newShelf', si, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
+      });
+    });
+    return best;
+  }
+
+  function openNewSheetCandidate(it) {
+    // Goal: use the SMALLEST stock sheet that the piece fits into (exact, or via
+    // allowed shrink). Area is the primary key; among same-area orientations we
+    // then prefer an exact cut, then fewer dead-zone offcuts, then less shrink.
+    let best = null;
+    stockSizes.forEach(s => {
+      const area = s.w * s.h;
+      [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
+        const fw = fitDim(w, s.w, tolerance);
+        const fh = fitDim(h, s.h, tolerance);
+        if (fw == null || fh == null) return;
+        const shrink = (w - fw) + (h - fh);
+        const dead = cfg.deadWeight
+          ? (classifyOffcut(round1(s.w - fw), fh, rules) === 'dead' ? 1 : 0)
+            + (classifyOffcut(s.w, round1(s.h - fh), rules) === 'dead' ? 1 : 0)
+          : 0;
+        const shrunk = shrink > 0 ? 1 : 0;
+        const cand = { stock: s, w: fw, h: fh, rot, shrink, area, dead, shrunk, reqW: w, reqH: h };
+        if (!best) { best = cand; return; }
+        if (cand.area !== best.area) { if (cand.area < best.area) best = cand; return; }
+        if (cand.shrunk !== best.shrunk) { if (cand.shrunk < best.shrunk) best = cand; return; }
+        if (cand.dead !== best.dead) { if (cand.dead < best.dead) best = cand; return; }
+        if (cand.shrink < best.shrink) best = cand;
+      });
+    });
+    return best;
+  }
+
+  for (const it of items) {
+    const placement = findBestPlacement(it);
+    if (placement) {
+      const item = { x: 0, w: placement.w, h: placement.h, code: it.code, rot: placement.rot,
+        shrink: placement.shrink, reqW: placement.reqW, reqH: placement.reqH,
+        shrinkW: round1(placement.reqW - placement.w), shrinkH: round1(placement.reqH - placement.h) };
+      if (placement.type === 'shelf') {
+        const shelf = sheets[placement.si].shelves[placement.hi];
+        item.x = shelf.usedWidth;
+        shelf.items.push(item);
+        shelf.usedWidth += placement.w;
+      } else {
+        const sheet = sheets[placement.si];
+        const usedHeight = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
+        const shelf = { y: usedHeight, height: placement.h, usedWidth: placement.w, items: [item] };
+        sheet.shelves.push(shelf);
+      }
+      continue;
+    }
+    const cand = openNewSheetCandidate(it);
+    if (cand) {
+      const sheet = { stock: cand.stock, shelves: [] };
+      sheets.push(sheet);
+      const item = { x: 0, w: cand.w, h: cand.h, code: it.code, rot: cand.rot,
+        shrink: cand.shrink, reqW: cand.reqW, reqH: cand.reqH,
+        shrinkW: round1(cand.reqW - cand.w), shrinkH: round1(cand.reqH - cand.h) };
+      sheet.shelves.push({ y: 0, height: cand.h, usedWidth: cand.w, items: [item] });
+      continue;
+    }
+    unplaced.push(it);
+  }
+
+  // Post-pass: grow shelf heights (each by at most maxTrash, so every sliver created
+  // stays trash-class) to absorb a dead-zone bottom band into pure trash. All-or-nothing:
+  // if the full band can't be safely covered, the dead band is left as-is.
+  function absorbDeadBand(sheet){
+    if (rules.maxTrash <= 0 || !sheet.shelves.length) return;
+    const usedH = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
+    const remH = round1(sheet.stock.h - usedH);
+    if (classifyOffcut(sheet.stock.w, remH, rules) !== 'dead') return;
+    const need = round1(remH - rules.maxTrash);
+    if (need <= 0) return;
+    if (need > sheet.shelves.length * rules.maxTrash) return;
+    const plan = [];
+    let left = need;
+    for (const sh of sheet.shelves) {
+      if (left <= 0) break;
+      const g = Math.min(rules.maxTrash, left);
+      const remW = round1(sheet.stock.w - sh.usedWidth);
+      const before = classifyOffcut(remW, sh.height, rules);
+      const after = classifyOffcut(remW, sh.height + g, rules);
+      if (after === 'dead' && before !== 'dead') continue; // don't create a new dead strip
+      plan.push([sh, g]); left = round1(left - g);
+    }
+    if (left > 0) return;
+    plan.forEach(([sh, g]) => { sh.height = round1(sh.height + g); });
+    let y = 0; sheet.shelves.forEach(sh => { sh.y = y; y = round1(y + sh.height); });
+    sheet.absorbed = round1(need);
+  }
+  sheets.forEach(absorbDeadBand);
+
+  let totalShrink = 0, deadCount = 0, deadArea = 0, keepCount = 0;
+  sheets.forEach(sheet => {
+    let used = 0;
+    sheet.shelves.forEach(sh => sh.items.forEach(i => { used += i.w * i.h; totalShrink += i.shrink || 0; }));
+    sheet.usedArea = used;
+    sheet.sheetArea = sheet.stock.w * sheet.stock.h;
+    sheet.offcuts = [];
+    sheet.shelves.forEach(sh => {
+      const remW = round1(sheet.stock.w - sh.usedWidth);
+      const cls = classifyOffcut(remW, sh.height, rules);
+      if (cls !== 'none') sheet.offcuts.push({ w: remW, h: sh.height, x: sh.usedWidth, y: sh.y, cls });
+    });
+    const usedHeight = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
+    const remH = round1(sheet.stock.h - usedHeight);
+    const clsBottom = classifyOffcut(sheet.stock.w, remH, rules);
+    if (clsBottom !== 'none') sheet.offcuts.push({ w: sheet.stock.w, h: remH, x: 0, y: usedHeight, cls: clsBottom });
+    sheet.deadCount = sheet.offcuts.filter(o => o.cls === 'dead').length;
+    sheet.keepCount = sheet.offcuts.filter(o => o.cls === 'keep').length;
+    deadCount += sheet.deadCount;
+    keepCount += sheet.keepCount;
+    deadArea += sheet.offcuts.filter(o => o.cls === 'dead').reduce((s, o) => s + o.w * o.h, 0);
+  });
+
+  return { sheets, unplaced, deadCount, deadArea, keepCount, totalShrink };
+}
+
+function optimizeThickness(pieces, stockSizes, tolerance, rules) {
+  const W_UNPLACED = 1e12, W_SHEET = 1e9, W_DEAD = 1e6, W_SHRINK = 1e3, W_DEADAREA = 1e-4;
+  const VARIANTS = [
+    { sortKey: 'h',    deadWeight: 1 },
+    { sortKey: 'area', deadWeight: 1 },
+    { sortKey: 'w',    deadWeight: 1 },
+    { sortKey: 'h',    deadWeight: 0 }, // = old algorithm, guarantees we never regress on sheet count
+  ];
+  let best = null;
+  VARIANTS.forEach(cfg => {
+    const res = packOnce(pieces, stockSizes, tolerance, rules, cfg);
+    const cost = res.unplaced.length * W_UNPLACED
+      + res.sheets.length * W_SHEET
+      + res.deadCount * W_DEAD
+      + res.totalShrink * W_SHRINK
+      + res.deadArea * W_DEADAREA;
+    if (!best || cost < best.cost) best = { ...res, cost, variant: cfg };
+  });
+  return best;
+}
+
+/* ================= RENDER RESULTS ================= */
+function fmt(n){ return String(Math.round(Number(n)*10)/10).replace(/\.0$/,''); }
+function m2(mm2){ return (mm2/1e6).toFixed(2); }
+
+const OFFCUT_STYLE = {
+  keep:  { fill:'#dcfce7', stroke:'#16a34a', dash:'6,4', label:o=>`giữ lại ${fmt(o.w)}x${fmt(o.h)}` },
+  dead:  { fill:'#fecaca', stroke:'#b91c1c', dash:null, label:o=>`⚠ khó dùng ${fmt(o.w)}x${fmt(o.h)}` },
+  trash: { fill:'#f1f5f9', stroke:'#94a3b8', dash:'6,4', label:o=>`bỏ ${fmt(o.w)}x${fmt(o.h)}` },
+};
+
+function sheetSVG(sheet){
+  const W = sheet.stock.w, H = sheet.stock.h;
+  const S = Math.max(W,H);
+  const M = S * 0.09;      // annotation margin for dimension lines (top & left only)
+  const sw = S * 0.0025;
+  const fsDim = S * 0.034;
+  let parts = [`<svg viewBox="${-M} ${-M} ${W + M*1.25} ${H + M*1.25}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">`];
+  parts.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#f8fafc" stroke="#0f172a" stroke-width="${Math.max(W,H)*0.004}"/>`);
+
+  // dimension lines: width along top edge, height along left edge
+  const yD = -M*0.40;
+  parts.push(`<line x1="0" y1="${yD}" x2="${W}" y2="${yD}" stroke="#0f172a" stroke-width="${sw}"/>`);
+  parts.push(`<line x1="0" y1="${yD-M*0.12}" x2="0" y2="${yD+M*0.12}" stroke="#0f172a" stroke-width="${sw}"/>`);
+  parts.push(`<line x1="${W}" y1="${yD-M*0.12}" x2="${W}" y2="${yD+M*0.12}" stroke="#0f172a" stroke-width="${sw}"/>`);
+  parts.push(`<text x="${W/2}" y="${yD-M*0.16}" font-size="${fsDim}" text-anchor="middle" fill="#0f172a" font-family="sans-serif" font-weight="600">${fmt(W)}mm</text>`);
+
+  const xD = -M*0.40;
+  parts.push(`<line x1="${xD}" y1="0" x2="${xD}" y2="${H}" stroke="#0f172a" stroke-width="${sw}"/>`);
+  parts.push(`<line x1="${xD-M*0.12}" y1="0" x2="${xD+M*0.12}" y2="0" stroke="#0f172a" stroke-width="${sw}"/>`);
+  parts.push(`<line x1="${xD-M*0.12}" y1="${H}" x2="${xD+M*0.12}" y2="${H}" stroke="#0f172a" stroke-width="${sw}"/>`);
+  const cx = xD - M*0.16;
+  parts.push(`<text x="${cx}" y="${H/2}" font-size="${fsDim}" text-anchor="middle" fill="#0f172a" font-family="sans-serif" font-weight="600" transform="rotate(-90 ${cx} ${H/2})">${fmt(H)}mm</text>`);
+
+  const fs = S * 0.028;
+  sheet.shelves.forEach(sh=>{
+    sh.items.forEach(it=>{
+      const shrunk = it.shrink>0;
+      const fillColor = shrunk ? '#fde68a' : '#bae6fd';
+      const strokeColor = shrunk ? '#b45309' : '#0369a1';
+      const strokeW = Math.max(W,H)*0.003 * (shrunk?2:1);
+      parts.push(`<rect x="${it.x}" y="${sh.y}" width="${it.w}" height="${it.h}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeW}"/>`);
+      const cxI = it.x + it.w/2, cyI = sh.y + it.h/2;
+      const k = Math.max(0.45, Math.min(1, Math.min(it.w/(fs*5.2), it.h/(fs*3.6))));
+      const f = fs * k;
+      const label1 = it.code || '';
+      const label2 = `${fmt(it.w)}x${fmt(it.h)}`;
+      if(k < 0.45){
+        parts.push(`<text x="${cxI}" y="${cyI + f*0.3}" font-size="${f}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif">${label2}</text>`);
+      } else {
+        parts.push(`<text x="${cxI}" y="${cyI - f*0.75}" font-size="${f}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif" font-weight="600">${label1}</text>`);
+        parts.push(`<text x="${cxI}" y="${cyI + f*0.30}" font-size="${f*0.85}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif">${label2}</text>`);
+        if(shrunk && k >= 0.55){
+          const dparts = [];
+          if(it.shrinkW > 0.05) dparts.push(`dài -${fmt(it.shrinkW)}`);
+          if(it.shrinkH > 0.05) dparts.push(`rộng -${fmt(it.shrinkH)}`);
+          if(dparts.length) parts.push(`<text x="${cxI}" y="${cyI + f*1.35}" font-size="${f*0.8}" fill="#92400e" font-weight="600" text-anchor="middle" font-family="sans-serif">hụt ${dparts.join(', ')}</text>`);
+        }
+      }
+      if(shrunk){
+        const t = Math.min(fs*0.9, it.w*0.25, it.h*0.25);
+        parts.push(`<polygon points="${it.x},${sh.y} ${it.x+t},${sh.y} ${it.x},${sh.y+t}" fill="#b45309"/>`);
+      }
+    });
+  });
+  (sheet.offcuts||[]).forEach(o=>{
+    if(o.w*o.h <= 0) return;
+    const st = OFFCUT_STYLE[o.cls] || OFFCUT_STYLE.trash;
+    const dashAttr = st.dash ? ` stroke-dasharray="${st.dash.split(',').map(n=>Math.max(W,H)*0.01*(Number(n)/6)).join(',')}"` : '';
+    const strokeW = Math.max(W,H)*0.002 * (o.cls==='dead'?2:1);
+    parts.push(`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="${st.fill}" stroke="${st.stroke}" stroke-width="${strokeW}"${dashAttr}/>`);
+    const fits = o.w > W*0.08 && o.h > H*0.04;
+    if(fits){
+      parts.push(`<text x="${o.x+o.w/2}" y="${o.y+o.h/2}" font-size="${fs*0.8}" fill="${st.stroke}" text-anchor="middle" font-family="sans-serif">${st.label(o)}</text>`);
+    } else if(o.cls==='dead'){
+      parts.push(`<text x="${o.x+o.w/2}" y="${o.y+o.h/2}" font-size="${fs*1.2}" fill="${st.stroke}" text-anchor="middle" font-family="sans-serif">⚠</text>`);
+    }
+  });
+  parts.push('</svg>');
+  return parts.join('');
+}
+
+function recordPendingLearningBatches(){
+  const batches = {};
+  state.demand.forEach(d=>{
+    if(d._ocrBatch != null && !d._recorded){
+      (batches[d._ocrBatch] = batches[d._ocrBatch] || []).push(d);
+    }
+  });
+  const batchIds = Object.keys(batches);
+  if(batchIds.length===0) return;
+  batchIds.forEach(bid=>{
+    const rows = batches[bid];
+    const aiRows = rows.map(r=>r._ocrSnapshot || {});
+    const finalRows = rows.map(r=>({ dai:r.w, rong:r.h, so_luong:r.qty, loai_kinh:r.ghichu||'', do_kinh:r.thickness||0 }));
+    learningRecordBatch(aiRows, finalRows, `phiên ${new Date().toLocaleString('vi-VN')}`);
+    rows.forEach(r=> r._recorded = true);
+  });
+  saveDemand();
+  renderLearningStats();
+}
+
+function runOptimize(){
+  recordPendingLearningBatches();
+
+  const invalidRows = state.demand.filter(d=>!d.w || !d.h || !d.qty);
+  if(state.demand.length===0){ showMsg('warn','Chưa có kính nào cần cắt.'); return; }
+  if(invalidRows.length){ showMsg('warn', `${invalidRows.length} dòng thiếu Dài/Rộng/SL — kiểm tra lại bảng.`); }
+
+  const tolerance = state.tolerance || 0;
+  const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0 };
+
+  // group by thickness
+  const groups = {};
+  state.demand.forEach(d=>{
+    if(!d.w || !d.h || !d.qty) return;
+    const th = d.thickness || 0;
+    if(!groups[th]) groups[th] = [];
+    groups[th].push({code:d.code, w:d.w, h:d.h, qty:d.qty});
+  });
+
+  const wrap = document.getElementById('resultsWrap');
+  wrap.innerHTML = '';
+  const noStockThicknesses = [];
+  const unplacedAll = [];
+  const sheetTotals = new Map();
+  let deadTotal = 0;
+
+  Object.keys(groups).sort((a,b)=>a-b).forEach(thKey=>{
+    const th = parseFloat(thKey);
+    const stockRow = state.stock.find(s=>s.thickness===th);
+    const stockSizes = stockRow ? stockRow.sizes : [];
+    const card = document.createElement('div');
+    card.className = 'card';
+    if(stockSizes.length===0){
+      noStockThicknesses.push(th || '(chưa chọn)');
+      card.innerHTML = `<h2>Độ dày ${th||'(chưa chọn)'}mm</h2><div class="err">Chưa khai báo khổ kính nguyên liệu cho độ dày này ở mục 3.</div>`;
+      wrap.appendChild(card);
+      return;
+    }
+    const {sheets, unplaced, deadCount, keepCount} = optimizeThickness(groups[thKey], stockSizes, tolerance, rules);
+    unplaced.forEach(u=>unplacedAll.push(`${u.code||''} ${fmt(u.w)}x${fmt(u.h)} (dày ${th}mm)`));
+    deadTotal += deadCount;
+
+    sheets.forEach(s=>{
+      const key = `${th}|${s.stock.w}x${s.stock.h}`;
+      const e = sheetTotals.get(key) || {th, w:s.stock.w, h:s.stock.h, count:0};
+      e.count++; sheetTotals.set(key, e);
+    });
+
+    let totalUsed=0, totalSheetArea=0;
+    sheets.forEach(s=>{ totalUsed+=s.usedArea; totalSheetArea+=s.sheetArea; });
+    const wastePct = totalSheetArea? (100*(1-totalUsed/totalSheetArea)).toFixed(1) : 0;
+
+    let html = `<h2>Độ dày ${th}mm — ${sheets.length} tấm nguyên khổ</h2>
+      <div class="stat"><span>Diện tích dùng: ${m2(totalUsed)} m²</span><span>Tổng khổ: ${m2(totalSheetArea)} m²</span><span>Hao hụt: ${wastePct}%</span></div>
+      <div class="stat"><span>Thừa giữ lại: ${keepCount}</span><span>Thừa khó dùng: ${deadCount}</span></div>
+      <div class="muted">🟦 cắt đủ · 🟨 có hụt · ⬜ thừa bỏ được · 🟩 thừa giữ lại · 🟥 thừa khó dùng</div>`;
+
+    sheets.forEach((sheet, i)=>{
+      const listStr = sheet.shelves.flatMap(sh=>sh.items).map(it=>{
+        let s = `${it.code||'?'} (${fmt(it.w)}x${fmt(it.h)}${it.rot?', xoay':''})`;
+        if(it.shrink>0) s += ` <span class="shrink-tag">[hụt ${fmt(it.shrink)}mm so với ${fmt(it.reqW)}x${fmt(it.reqH)}]</span>`;
+        return s;
+      }).join(', ');
+      const keepStr = sheet.offcuts.filter(o=>o.cls==='keep').map(o=>`${fmt(o.w)}x${fmt(o.h)}`).join(', ');
+      const deadStr = sheet.offcuts.filter(o=>o.cls==='dead').map(o=>`${fmt(o.w)}x${fmt(o.h)}`).join(', ');
+      html += `<div class="sheet-block">
+        <h3>Tấm ${i+1}/${sheets.length} — dày ${th}mm — khổ ${fmt(sheet.stock.w)}x${fmt(sheet.stock.h)} (${(100*sheet.usedArea/sheet.sheetArea).toFixed(0)}% dùng)</h3>
+        <div class="sheet-svg-wrap">${sheetSVG(sheet)}</div>
+        <div class="muted" style="margin-top:6px;">Cắt: ${listStr}</div>
+        ${keepStr ? `<div class="muted">Kính thừa giữ lại: ${keepStr}</div>` : ''}
+        ${deadStr ? `<div class="warn">⚠ Thừa khó dùng: ${deadStr}</div>` : ''}
+      </div>`;
+    });
+    card.innerHTML = html;
+    wrap.appendChild(card);
+  });
+
+  if(sheetTotals.size){
+    const rows = [...sheetTotals.values()].sort((a,b)=> a.th-b.th || (a.w*a.h)-(b.w*b.h) || a.w-b.w);
+    const grandTotal = rows.reduce((s,r)=>s+r.count,0);
+    const totalsCard = document.createElement('div');
+    totalsCard.className = 'card';
+    totalsCard.id = 'totalsCard';
+    totalsCard.innerHTML = `<h2>Tổng số tấm nguyên khổ cần dùng</h2>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Độ dày — khổ</th><th style="text-align:right;">Số tấm</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr><td>Dày ${r.th}mm — khổ ${fmt(r.w)}x${fmt(r.h)}</td><td style="text-align:right;"><b>${r.count} tấm</b></td></tr>`).join('')}</tbody>
+      </table></div>
+      <div class="stat"><span>Tổng cộng</span><span><b>${grandTotal} tấm</b></span></div>
+      ${deadTotal>0 ? `<div class="warn">Có ${deadTotal} phần thừa khó dùng — xem nhãn ⚠ trên bản vẽ.</div>` : ''}`;
+    wrap.appendChild(totalsCard);
+  }
+
+  if(unplacedAll.length){
+    const w = document.createElement('div');
+    w.className = 'card err';
+    w.innerHTML = `<b>Không xếp được (vượt khổ nguyên liệu hiện có):</b><br>${unplacedAll.join('<br>')}`;
+    wrap.prepend(w);
+  }
+  if(noStockThicknesses.length){
+    showMsg('warn', `Thiếu khổ nguyên liệu cho độ dày: ${noStockThicknesses.join(', ')}mm`);
+  }
+  const hasResults = wrap.children.length > 0;
+  document.getElementById('btnPrintExport').classList.toggle('hidden', !hasResults);
+  document.getElementById('printHint').classList.toggle('hidden', !hasResults);
+  if (typeof wrap.scrollIntoView === 'function') wrap.scrollIntoView({behavior:'smooth'});
+}
+
+document.getElementById('btnOptimize').addEventListener('click', runOptimize);
+document.getElementById('btnPrintExport').addEventListener('click', ()=> window.print());
+
+/* ================= INIT ================= */
+state.learning = loadLearningDB();
+renderLearningStats();
+renderStockTable();
+renderDemandTable();
+renderOffcutRuleHint();
+</script>
+</body>
+</html>
