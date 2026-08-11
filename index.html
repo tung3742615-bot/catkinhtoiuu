@@ -116,6 +116,10 @@
       <input type="number" id="maxTrashInput" style="width:80px;">
     </div>
     <div id="offcutRuleHint" class="muted"></div>
+    <div class="row" style="margin-top:10px;align-items:flex-start;">
+      <input type="checkbox" id="allowExtraSheetInput" style="margin-top:2px;">
+      <label class="muted" for="allowExtraSheetInput" style="flex:1;">Cho phép dùng thêm tối đa 1 tấm/độ dày nếu nhờ đó tránh được HOÀN TOÀN phần thừa khó dùng</label>
+    </div>
   </div>
 
   <!-- DEMAND INPUT -->
@@ -148,7 +152,10 @@
         <tbody></tbody>
       </table>
     </div>
-    <button class="btn secondary small" id="addDemandRow" style="margin-top:8px;">+ Thêm dòng thủ công</button>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn secondary small" id="addDemandRow">+ Thêm dòng thủ công</button>
+      <button class="btn secondary small" id="clearDemandTable" style="color:#fca5a5;">🗑️ Xóa bảng tính</button>
+    </div>
   </div>
 
   <button class="btn big" id="btnOptimize">🔧 Tối ưu cắt</button>
@@ -161,7 +168,7 @@
 
 <script>
 /* ================= STORAGE ================= */
-const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash' };
+const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash', allowExtraSheet:'ck_allow_extra_sheet' };
 const DEFAULT_STOCK = [
   {thickness:3,  sizes:[{w:1520,h:2140}]},
   {thickness:4,  sizes:[{w:1520,h:2140},{w:1680,h:2140}]},
@@ -194,6 +201,8 @@ function loadMinKeep(){ const v = parseFloat(localStorage.getItem(LS_KEYS.minKee
 function saveMinKeep(v){ localStorage.setItem(LS_KEYS.minKeep, String(v)); }
 function loadMaxTrash(){ const v = parseFloat(localStorage.getItem(LS_KEYS.maxTrash)); return isNaN(v) ? 100 : v; }
 function saveMaxTrash(v){ localStorage.setItem(LS_KEYS.maxTrash, String(v)); }
+function loadAllowExtraSheet(){ const v = localStorage.getItem(LS_KEYS.allowExtraSheet); return v===null ? true : v==='1'; }
+function saveAllowExtraSheet(v){ localStorage.setItem(LS_KEYS.allowExtraSheet, v ? '1' : '0'); }
 
 let state = {
   stock: loadStock(),
@@ -202,6 +211,7 @@ let state = {
   captureThickness: loadCaptureThickness(),
   minKeep: loadMinKeep(),
   maxTrash: loadMaxTrash(),
+  allowExtraSheet: loadAllowExtraSheet(),
   learning: null,
   nextId: 1,
   nextBatchId: 1
@@ -476,6 +486,11 @@ document.getElementById('maxTrashInput').addEventListener('change', e=>{
   saveMaxTrash(state.maxTrash);
   renderOffcutRuleHint();
 });
+document.getElementById('allowExtraSheetInput').checked = state.allowExtraSheet;
+document.getElementById('allowExtraSheetInput').addEventListener('change', e=>{
+  state.allowExtraSheet = e.target.checked;
+  saveAllowExtraSheet(state.allowExtraSheet);
+});
 
 document.getElementById('captureThicknessInput').value = state.captureThickness;
 document.getElementById('captureThicknessInput').addEventListener('change', e=>{
@@ -567,6 +582,16 @@ document.getElementById('addDemandRow').addEventListener('click', ()=>{
   state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness: state.stock[0]?.thickness || '', ghichu:''});
   saveDemand(); renderDemandTable();
 });
+document.getElementById('clearDemandTable').addEventListener('click', ()=>{
+  if(state.demand.length===0) return;
+  if(!confirm('Xóa toàn bộ bảng tính hiện tại? Không thể hoàn tác.')) return;
+  state.demand = [];
+  saveDemand(); renderDemandTable();
+  document.getElementById('resultsWrap').innerHTML = '';
+  document.getElementById('btnPrintExport').classList.add('hidden');
+  document.getElementById('printHint').classList.add('hidden');
+  showMsg('ok', 'Đã xóa bảng tính.');
+});
 
 function showMsg(type, text){
   const el = document.getElementById('globalMsg');
@@ -606,7 +631,6 @@ NHIỆM VỤ: Đọc TOÀN BỘ các dòng kích thước kính CÒN NGUYÊN (ch
 - Số đầu tiên là chiều dài (dai), số thứ hai là chiều rộng (rong), sau dấu "=" là số lượng
 - Ngoặc nhọn/móc gom nhiều dòng lại → tất cả dòng trong nhóm đó dùng chung màu kính/ghi chú
 - Ghi chú hay gặp: màu/loại kính (trắng, xám khói, xanh đen, kính sữa, kính trong, gương, phản quang...), yêu cầu mài cạnh (mài 1 cạnh, mài 2 cạnh, không mài, vát, mỏ vịt...)
-
 ĐỊNH DẠNG BẢNG IN SẴN THƯỜNG GẶP (bảng số đo kính in từ phần mềm):
 - Có các cột: #, Ký hiệu, Dài (mm), Rộng (mm), SL, Loại kính, Độ dày
 - Cột "Ký hiệu" nếu có dạng "1)", "2)"... thì lấy làm mã (code) của dòng đó
@@ -719,10 +743,11 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
 
   let sheets = [], unplaced = [];
 
-  function findBestPlacement(it) {
+  function findBestPlacement(it, exclude) {
     let best = null;
     sheets.forEach((sheet, si) => {
       sheet.shelves.forEach((shelf, hi) => {
+        if (exclude && exclude.si === si && exclude.hi === hi) return;
         const availW = sheet.stock.w - shelf.usedWidth;
         const availH = shelf.height;
         [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
@@ -735,7 +760,8 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
           const dead = cfg.deadWeight
             ? (classifyOffcut(remWAfter, shelf.height, rules) === 'dead' ? 1 : 0)
             : 0;
-          const score = shrink * S_SHRINK + dead * S_DEAD + leftover;
+          const tie = cfg.fitKey === 'w' ? remWAfter : leftover;
+          const score = shrink * S_SHRINK + dead * S_DEAD + tie;
           if (!best || score < best.score) best = { type: 'shelf', si, hi, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
         });
       });
@@ -754,7 +780,8 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
           ? (classifyOffcut(remWAfter, fh, rules) === 'dead' ? 1 : 0)
             + (classifyOffcut(sheet.stock.w, bandAfter, rules) === 'dead' ? 1 : 0)
           : 0;
-        const score = shrink * S_SHRINK + dead * S_DEAD + leftover;
+        const tie = cfg.fitKey === 'w' ? (remWAfter + 1) : leftover;
+        const score = shrink * S_SHRINK + dead * S_DEAD + tie;
         if (!best || score < best.score) best = { type: 'newShelf', si, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
       });
     });
@@ -848,6 +875,96 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
     let y = 0; sheet.shelves.forEach(sh => { sh.y = y; y = round1(y + sh.height); });
     sheet.absorbed = round1(need);
   }
+
+  // Repair pass: dead-zone strips the greedy loop above could not avoid (because it
+  // never compares "accept a dead offcut" against "open another sheet instead" — it
+  // only ever chooses among sheets already open) get a second chance here, once the
+  // full layout is known. Only items at shelf index >= 1 are ever evicted, which keeps
+  // shelf.height (fixed by the first item) and shelf.y untouched — no geometry reflow
+  // needed beyond re-flowing x within the shelf and y across the sheet.
+  let repairMoves = 0, repairNewSheets = 0;
+  function deadStripCount(){
+    let c = 0;
+    sheets.forEach(sheet => {
+      sheet.shelves.forEach(sh => {
+        if (classifyOffcut(round1(sheet.stock.w - sh.usedWidth), sh.height, rules) === 'dead') c++;
+      });
+      const uh = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
+      if (classifyOffcut(sheet.stock.w, round1(sheet.stock.h - uh), rules) === 'dead') c++;
+    });
+    return c;
+  }
+  function reflowX(shelf){ let x = 0; shelf.items.forEach(i => { i.x = x; x = round1(x + i.w); }); shelf.usedWidth = x; }
+  function reflowY(sheet){ let y = 0; sheet.shelves.forEach(sh => { sh.y = y; y = round1(y + sh.height); }); }
+  function applyPlacement(p, src){
+    const item = { x: 0, w: p.w, h: p.h, code: src.code, rot: p.rot, shrink: p.shrink,
+      reqW: p.reqW, reqH: p.reqH, shrinkW: round1(p.reqW - p.w), shrinkH: round1(p.reqH - p.h) };
+    if (p.type === 'shelf') {
+      const sh = sheets[p.si].shelves[p.hi];
+      item.x = sh.usedWidth; sh.items.push(item); sh.usedWidth = round1(sh.usedWidth + p.w);
+    } else {
+      const s = sheets[p.si];
+      const uh = s.shelves.reduce((a, x) => a + x.height, 0);
+      s.shelves.push({ y: uh, height: p.h, usedWidth: p.w, items: [item] });
+    }
+  }
+  function repairDeadStrips(maxNewSheets){
+    let newSheets = 0;
+    let guard = 4 * deadStripCount() + 8;
+    let progress = true;
+    while (progress && guard-- > 0) {
+      progress = false;
+      outer:
+      for (let si = 0; si < sheets.length; si++) {
+        const sheet = sheets[si];
+        for (let hi = 0; hi < sheet.shelves.length; hi++) {
+          const shelf = sheet.shelves[hi];
+          const remW = round1(sheet.stock.w - shelf.usedWidth);
+          if (classifyOffcut(remW, shelf.height, rules) !== 'dead') continue;
+          for (let k = shelf.items.length - 1; k >= 1; k--) {
+            const ev = shelf.items[k];
+            if (classifyOffcut(round1(remW + ev.w), shelf.height, rules) === 'dead') continue;
+
+            const before = deadStripCount();
+            const snapshot = shelf.items.slice();
+            shelf.items.splice(k, 1); reflowX(shelf);
+
+            const norm = { code: ev.code, w: Math.max(ev.reqW, ev.reqH), h: Math.min(ev.reqW, ev.reqH) };
+
+            const p = findBestPlacement(norm, { si, hi });
+            if (p) {
+              applyPlacement(p, norm);
+              if (deadStripCount() < before && p.shrink <= (ev.shrink || 0) + 1e-9) {
+                repairMoves++; progress = true; break outer;
+              }
+              if (p.type === 'shelf') { const sh = sheets[p.si].shelves[p.hi]; sh.items.pop(); reflowX(sh); }
+              else { sheets[p.si].shelves.pop(); }
+            }
+
+            if (newSheets < maxNewSheets) {
+              const alt = openNewSheetCandidate(norm);
+              if (alt && alt.shrink <= (ev.shrink || 0) + 1e-9) {
+                const ns = { stock: alt.stock, shelves: [] };
+                sheets.push(ns);
+                ns.shelves.push({ y: 0, height: alt.h, usedWidth: alt.w, items: [{ x: 0, w: alt.w, h: alt.h,
+                  code: norm.code, rot: alt.rot, shrink: alt.shrink, reqW: alt.reqW, reqH: alt.reqH,
+                  shrinkW: round1(alt.reqW - alt.w), shrinkH: round1(alt.reqH - alt.h) }] });
+                if (deadStripCount() < before) {
+                  repairMoves++; repairNewSheets++; newSheets++; progress = true; break outer;
+                }
+                sheets.pop();
+              }
+            }
+
+            shelf.items = snapshot; reflowX(shelf);
+          }
+        }
+      }
+      sheets.forEach(s => { s.shelves = s.shelves.filter(sh => sh.items.length > 0); reflowY(s); });
+      sheets = sheets.filter(s => s.shelves.length > 0);
+    }
+  }
+  if (cfg.repair) repairDeadStrips(cfg.repairNewSheet || 0);
   sheets.forEach(absorbDeadBand);
 
   let totalShrink = 0, deadCount = 0, deadArea = 0, keepCount = 0;
@@ -873,7 +990,7 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
     deadArea += sheet.offcuts.filter(o => o.cls === 'dead').reduce((s, o) => s + o.w * o.h, 0);
   });
 
-  return { sheets, unplaced, deadCount, deadArea, keepCount, totalShrink };
+  return { sheets, unplaced, deadCount, deadArea, keepCount, totalShrink, repairMoves, repairNewSheets };
 }
 
 function optimizeThickness(pieces, stockSizes, tolerance, rules) {
@@ -883,17 +1000,45 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
     { sortKey: 'area', deadWeight: 1 },
     { sortKey: 'w',    deadWeight: 1 },
     { sortKey: 'h',    deadWeight: 0 }, // = old algorithm, guarantees we never regress on sheet count
+    { sortKey: 'h',    deadWeight: 1, fitKey: 'w' },
+    { sortKey: 'area', deadWeight: 1, fitKey: 'w' },
+    { sortKey: 'w',    deadWeight: 1, fitKey: 'w' },
   ];
+  const cost = r => r.unplaced.length * W_UNPLACED
+    + r.sheets.length * W_SHEET
+    + r.deadCount * W_DEAD
+    + r.totalShrink * W_SHRINK
+    + r.deadArea * W_DEADAREA;
+
+  // Stage 1: free repair only (never opens an extra sheet). Cannot regress sheet count
+  // vs. the pre-repair algorithm — the legacy deadWeight:0 variant is still in the mix
+  // as a floor.
   let best = null;
-  VARIANTS.forEach(cfg => {
-    const res = packOnce(pieces, stockSizes, tolerance, rules, cfg);
-    const cost = res.unplaced.length * W_UNPLACED
-      + res.sheets.length * W_SHEET
-      + res.deadCount * W_DEAD
-      + res.totalShrink * W_SHRINK
-      + res.deadArea * W_DEADAREA;
-    if (!best || cost < best.cost) best = { ...res, cost, variant: cfg };
+  VARIANTS.forEach(v => {
+    const res = packOnce(pieces, stockSizes, tolerance, rules, { ...v, repair: 1 });
+    const c = cost(res);
+    if (!best || c < best.cost) best = { ...res, cost: c, variant: v };
   });
+
+  // Stage 2: bounded trade — spend at most ONE extra stock sheet per thickness group,
+  // and only if that sheet buys a completely clean result (zero dead offcuts). This is
+  // deliberately all-or-nothing: a messy order with several dead strips that one sheet
+  // can't fully clean up is left as Stage 1 produced it, so this never spirals into
+  // buying sheets just to nibble at the problem.
+  if (rules.allowExtraSheet && best.deadCount > 0) {
+    const sheetCap = best.sheets.length + 1;
+    let clean = null;
+    VARIANTS.forEach(v => {
+      if (!v.deadWeight) return; // skip the legacy dead-agnostic variant here
+      const r = packOnce(pieces, stockSizes, tolerance, rules, { ...v, repair: 1, repairNewSheet: 1 });
+      if (r.unplaced.length > best.unplaced.length) return; // never trade away a placement
+      if (r.deadCount !== 0) return;                        // all-or-nothing
+      if (r.sheets.length > sheetCap) return;                // hard cap: +1 sheet max
+      const c = cost(r);
+      if (!clean || c < clean.cost) clean = { ...r, cost: c, variant: v };
+    });
+    if (clean) { clean.tradedSheet = clean.sheets.length > best.sheets.length; best = clean; }
+  }
   return best;
 }
 
@@ -1006,7 +1151,7 @@ function runOptimize(){
   if(invalidRows.length){ showMsg('warn', `${invalidRows.length} dòng thiếu Dài/Rộng/SL — kiểm tra lại bảng.`); }
 
   const tolerance = state.tolerance || 0;
-  const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0 };
+  const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0, allowExtraSheet: !!state.allowExtraSheet };
 
   // group by thickness
   const groups = {};
@@ -1036,7 +1181,7 @@ function runOptimize(){
       wrap.appendChild(card);
       return;
     }
-    const {sheets, unplaced, deadCount, keepCount} = optimizeThickness(groups[thKey], stockSizes, tolerance, rules);
+    const {sheets, unplaced, deadCount, keepCount, tradedSheet} = optimizeThickness(groups[thKey], stockSizes, tolerance, rules);
     unplaced.forEach(u=>unplacedAll.push(`${u.code||''} ${fmt(u.w)}x${fmt(u.h)} (dày ${th}mm)`));
     deadTotal += deadCount;
 
@@ -1053,7 +1198,8 @@ function runOptimize(){
     let html = `<h2>Độ dày ${th}mm — ${sheets.length} tấm nguyên khổ</h2>
       <div class="stat"><span>Diện tích dùng: ${m2(totalUsed)} m²</span><span>Tổng khổ: ${m2(totalSheetArea)} m²</span><span>Hao hụt: ${wastePct}%</span></div>
       <div class="stat"><span>Thừa giữ lại: ${keepCount}</span><span>Thừa khó dùng: ${deadCount}</span></div>
-      <div class="muted">🟦 cắt đủ · 🟨 có hụt · ⬜ thừa bỏ được · 🟩 thừa giữ lại · 🟥 thừa khó dùng</div>`;
+      <div class="muted">🟦 cắt đủ · 🟨 có hụt · ⬜ thừa bỏ được · 🟩 thừa giữ lại · 🟥 thừa khó dùng</div>
+      ${tradedSheet ? `<div class="ok">✅ Đã dùng thêm 1 tấm để không tạo ra phần thừa khó dùng — bù lại có thêm kính thừa giữ lại (tắt ở mục 3 nếu không muốn).</div>` : ''}`;
 
     sheets.forEach((sheet, i)=>{
       const listStr = sheet.shelves.flatMap(sh=>sh.items).map(it=>{
