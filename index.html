@@ -631,6 +631,7 @@ NHIỆM VỤ: Đọc TOÀN BỘ các dòng kích thước kính CÒN NGUYÊN (ch
 - Số đầu tiên là chiều dài (dai), số thứ hai là chiều rộng (rong), sau dấu "=" là số lượng
 - Ngoặc nhọn/móc gom nhiều dòng lại → tất cả dòng trong nhóm đó dùng chung màu kính/ghi chú
 - Ghi chú hay gặp: màu/loại kính (trắng, xám khói, xanh đen, kính sữa, kính trong, gương, phản quang...), yêu cầu mài cạnh (mài 1 cạnh, mài 2 cạnh, không mài, vát, mỏ vịt...)
+
 ĐỊNH DẠNG BẢNG IN SẴN THƯỜNG GẶP (bảng số đo kính in từ phần mềm):
 - Có các cột: #, Ký hiệu, Dài (mm), Rộng (mm), SL, Loại kính, Độ dày
 - Cột "Ký hiệu" nếu có dạng "1)", "2)"... thì lấy làm mã (code) của dòng đó
@@ -965,6 +966,97 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
     }
   }
   if (cfg.repair) repairDeadStrips(cfg.repairNewSheet || 0);
+
+  // Harmonize pass: when the last-opened shelf on a sheet had to shrink its
+  // defining item's height to fit the leftover vertical space, real-world
+  // cutting often looks better spreading that same total shrink evenly across
+  // the earlier shelves too, instead of dumping it all onto one piece (e.g. an
+  // 8mm shortfall becomes ~2.7mm off three stacked pieces instead of 8mm off
+  // one). Purely cosmetic: the sum of shelf heights never changes, so it can
+  // never affect sheet count or dead-zone counts — each shelf's own offcut
+  // classification is re-checked and the whole move is skipped if it would
+  // turn any shelf's leftover strip into a new dead zone.
+  function distributeEven(caps, total){
+    const n = caps.length;
+    const alloc = new Array(n).fill(0);
+    let remaining = round1(total);
+    let active = [];
+    for (let i = 0; i < n; i++) if (caps[i] > OFFCUT_EPS) active.push(i);
+    let guard = n + 4;
+    while (remaining > OFFCUT_EPS && active.length && guard-- > 0) {
+      const share = remaining / active.length;
+      let given = 0;
+      const next = [];
+      active.forEach(i => {
+        const room = round1(caps[i] - alloc[i]);
+        const give = Math.min(share, room);
+        alloc[i] = round1(alloc[i] + give);
+        given = round1(given + give);
+        if (round1(room - give) > OFFCUT_EPS) next.push(i);
+      });
+      remaining = round1(remaining - given);
+      active = next;
+      if (given <= OFFCUT_EPS) break;
+    }
+    return alloc;
+  }
+  function harmonizeVerticalShrink(sheet){
+    const shelves = sheet.shelves;
+    if (shelves.length < 2) return;
+    const last = shelves[shelves.length - 1];
+    const tightItem = last.items[0];
+    if (!tightItem || tightItem.shrinkH <= OFFCUT_EPS) return;
+
+    const totalDeficit = tightItem.shrinkH;
+    const participants = [{ shelf: last, item: tightItem, cap: tolerance }];
+    for (let i = 0; i < shelves.length - 1; i++) {
+      const sh = shelves[i];
+      const f = sh.items[0];
+      if (!f || f.shrinkH > OFFCUT_EPS) continue;
+      const others = sh.items.slice(1);
+      const tallestOther = others.length ? Math.max(...others.map(it => it.h)) : 0;
+      const cap = round1(Math.min(tolerance, sh.height - tallestOther));
+      if (cap > OFFCUT_EPS) participants.push({ shelf: sh, item: f, cap });
+    }
+    if (participants.length < 2) return;
+
+    const caps = participants.map(p => p.cap);
+    const alloc = distributeEven(caps, totalDeficit);
+    if (round1(alloc.reduce((a, b) => a + b, 0)) < round1(totalDeficit) - 0.15) return;
+
+    for (let i = 0; i < participants.length; i++) {
+      const p = participants[i];
+      const remW = round1(sheet.stock.w - p.shelf.usedWidth);
+      const newH = round1(p.item.reqH - alloc[i]);
+      const before = classifyOffcut(remW, p.shelf.height, rules);
+      const after = classifyOffcut(remW, newH, rules);
+      if (after === 'dead' && before !== 'dead') return; // would create a new dead strip — skip entirely
+    }
+
+    participants.forEach((p, i) => {
+      const newShrink = round1(alloc[i]);
+      const newH = round1(p.item.reqH - newShrink);
+      p.item.h = newH;
+      p.item.shrinkH = newShrink;
+      p.item.shrink = round1((p.item.shrinkW || 0) + newShrink);
+      p.shelf.height = newH;
+    });
+    // The tight shelf's height just grew — give back some of that room to any
+    // *other* item on the same row that also had to shrink for the same reason
+    // (e.g. two identical pieces sharing one row), so they end up matching
+    // instead of only the row-defining piece being harmonized.
+    last.items.forEach(item => {
+      if (item === tightItem || item.shrinkH <= OFFCUT_EPS) return;
+      const newH = Math.min(item.reqH, last.height);
+      if (newH > item.h) {
+        item.h = round1(newH);
+        item.shrinkH = round1(item.reqH - item.h);
+        item.shrink = round1((item.shrinkW || 0) + item.shrinkH);
+      }
+    });
+    reflowY(sheet);
+  }
+  sheets.forEach(harmonizeVerticalShrink);
   sheets.forEach(absorbDeadBand);
 
   let totalShrink = 0, deadCount = 0, deadArea = 0, keepCount = 0;
