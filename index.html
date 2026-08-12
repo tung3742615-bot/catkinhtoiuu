@@ -1059,6 +1059,16 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
   sheets.forEach(harmonizeVerticalShrink);
   sheets.forEach(absorbDeadBand);
 
+  const totals = finalizeSheets(sheets, rules);
+  return { sheets, unplaced, repairMoves, repairNewSheets, ...totals };
+}
+
+// finalizeSheets: computes each sheet's used area, offcuts (classified keep/trash/dead)
+// and the aggregate totals (totalShrink, deadCount, deadArea, keepCount) from a raw
+// {stock, shelves:[{y,height,usedWidth,items}]} sheet list. Shared by packOnce's own
+// output AND by grid-batched sheets built directly by tryGridBatching (below), so both
+// paths report offcuts/dead-zones the same way and can be compared apples-to-apples.
+function finalizeSheets(sheets, rules){
   let totalShrink = 0, deadCount = 0, deadArea = 0, keepCount = 0;
   sheets.forEach(sheet => {
     let used = 0;
@@ -1081,8 +1091,119 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
     keepCount += sheet.keepCount;
     deadArea += sheet.offcuts.filter(o => o.cls === 'dead').reduce((s, o) => s + o.w * o.h, 0);
   });
+  return { totalShrink, deadCount, deadArea, keepCount };
+}
 
-  return { sheets, unplaced, deadCount, deadArea, keepCount, totalShrink, repairMoves, repairNewSheets };
+// maxCount: how many copies of a piece with side `req` can line up across `avail` if every
+// copy is allowed to shrink that side by up to `tol`. Used by tryGridBatching to figure out
+// how many identical pieces tile a stock sheet when every one of them gives up a little size.
+function maxCount(req, avail, tol){
+  if (req <= 0) return 0;
+  const minSize = req - tol;
+  if (minSize <= 0.01) return 0;
+  return Math.floor((avail + 1e-6) / minSize);
+}
+
+// tryGridBatching: real cutters facing a big batch of IDENTICAL pieces often tile them
+// straight across a whole sheet, shaving a couple mm off every piece so N of them divide
+// the sheet evenly — rather than cutting each one exactly and letting the shelf-packer
+// scatter the batch across whichever gaps happen to be open (which is what packOnce's
+// greedy, one-piece-at-a-time shrink logic does, since it only shrinks a piece when there's
+// no other way to fit it into whatever space is already open). This finds, for every group
+// of same-size pieces with a big enough quantity, the orientation + stock size that tiles
+// the MOST copies per sheet (uniform shrink across the whole grid, capped at `tolerance`),
+// and pre-fills as many FULLY tiled sheets as the quantity allows. Whatever's left over
+// (not enough to fill one more full grid) is hands back to the normal packer. This is only
+// ever kept by optimizeThickness if it actually beats the non-batched result on cost — so a
+// group that batches worse (e.g. because it was secretly a great filler for other shapes)
+// simply doesn't get used.
+function tryGridBatching(pieces, stockSizes, tolerance){
+  const groups = new Map();
+  pieces.forEach(p => {
+    if (!p.qty || !p.w || !p.h) return;
+    let w = p.w, h = p.h;
+    if (h > w) { const t = w; w = h; h = t; }
+    const key = round1(w) + 'x' + round1(h);
+    if (!groups.has(key)) groups.set(key, { w, h, entries: [], totalQty: 0 });
+    const g = groups.get(key);
+    g.entries.push({ code: p.code, qty: p.qty });
+    g.totalQty += p.qty;
+  });
+
+  const gridSheets = [];
+  let anyBatched = false;
+  const remainderExtra = [];
+
+  groups.forEach(g => {
+    let bestPlan = null;
+    stockSizes.forEach(s => {
+      [[g.w, g.h, false], [g.h, g.w, true]].forEach(([rw, rh, rot]) => {
+        const cols = maxCount(rw, s.w, tolerance);
+        const rows = maxCount(rh, s.h, tolerance);
+        const capacity = cols * rows;
+        if (capacity < 2) return;
+        // Round DOWN (never up) so cols*colW / rows*rowH can never exceed the stock
+        // sheet by a rounding hair — this is a physical cut size, not a display value.
+        const floor1 = v => Math.floor(v * 10) / 10;
+        const colW = Math.min(rw, floor1(s.w / cols));
+        const rowH = Math.min(rh, floor1(s.h / rows));
+        const shrink = round1((rw - colW) + (rh - rowH));
+        const cand = { stock: s, cols, rows, capacity, colW, rowH, rw, rh, rot, shrink };
+        if (!bestPlan || cand.capacity > bestPlan.capacity ||
+            (cand.capacity === bestPlan.capacity && cand.shrink < bestPlan.shrink)) bestPlan = cand;
+      });
+    });
+    if (!bestPlan) return;
+    const sheetsNeeded = Math.floor(g.totalQty / bestPlan.capacity);
+    if (sheetsNeeded < 1) return;
+
+    anyBatched = true;
+    let need = sheetsNeeded * bestPlan.capacity;
+    const codePool = [];
+    g.entries.forEach(e => { for (let i = 0; i < e.qty; i++) codePool.push(e.code); });
+    const usedCodes = codePool.slice(0, need);
+    const leftoverCodes = codePool.slice(need);
+    let poolIdx = 0;
+
+    for (let s = 0; s < sheetsNeeded; s++) {
+      const shelves = [];
+      for (let r = 0; r < bestPlan.rows; r++) {
+        const items = [];
+        for (let c = 0; c < bestPlan.cols; c++) {
+          const code = usedCodes[poolIdx++] || '';
+          items.push({
+            x: round1(c * bestPlan.colW), w: bestPlan.colW, h: bestPlan.rowH, code, rot: bestPlan.rot,
+            shrink: bestPlan.shrink, reqW: bestPlan.rw, reqH: bestPlan.rh,
+            shrinkW: round1(bestPlan.rw - bestPlan.colW), shrinkH: round1(bestPlan.rh - bestPlan.rowH)
+          });
+        }
+        shelves.push({ y: round1(r * bestPlan.rowH), height: bestPlan.rowH, usedWidth: round1(bestPlan.cols * bestPlan.colW), items });
+      }
+      gridSheets.push({ stock: bestPlan.stock, shelves });
+    }
+
+    g.batched = true;
+    if (leftoverCodes.length) {
+      // fold the leftover copies back into a single remainder piece for this size
+      const byCode = new Map();
+      leftoverCodes.forEach(code => byCode.set(code, (byCode.get(code) || 0) + 1));
+      byCode.forEach((qty, code) => remainderExtra.push({ code, w: g.w, h: g.h, qty }));
+    }
+  });
+
+  if (!anyBatched) return null;
+
+  const remainderPieces = [];
+  pieces.forEach(p => {
+    if (!p.qty || !p.w || !p.h) { remainderPieces.push(p); return; }
+    let w = p.w, h = p.h; if (h > w) { const t = w; w = h; h = t; }
+    const key = round1(w) + 'x' + round1(h);
+    const g = groups.get(key);
+    if (!g || !g.batched) remainderPieces.push(p);
+  });
+  remainderPieces.push(...remainderExtra);
+
+  return { gridSheets, remainderPieces };
 }
 
 function optimizeThickness(pieces, stockSizes, tolerance, rules) {
@@ -1102,35 +1223,58 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
     + r.totalShrink * W_SHRINK
     + r.deadArea * W_DEADAREA;
 
-  // Stage 1: free repair only (never opens an extra sheet). Cannot regress sheet count
-  // vs. the pre-repair algorithm — the legacy deadWeight:0 variant is still in the mix
-  // as a floor.
-  let best = null;
-  VARIANTS.forEach(v => {
-    const res = packOnce(pieces, stockSizes, tolerance, rules, { ...v, repair: 1 });
-    const c = cost(res);
-    if (!best || c < best.cost) best = { ...res, cost: c, variant: v };
-  });
-
-  // Stage 2: bounded trade — spend at most ONE extra stock sheet per thickness group,
-  // and only if that sheet buys a completely clean result (zero dead offcuts). This is
-  // deliberately all-or-nothing: a messy order with several dead strips that one sheet
-  // can't fully clean up is left as Stage 1 produced it, so this never spirals into
-  // buying sheets just to nibble at the problem.
-  if (rules.allowExtraSheet && best.deadCount > 0) {
-    const sheetCap = best.sheets.length + 1;
-    let clean = null;
+  function packAllVariants(piecesArg){
+    // Stage 1: free repair only (never opens an extra sheet). Cannot regress sheet count
+    // vs. the pre-repair algorithm — the legacy deadWeight:0 variant is still in the mix
+    // as a floor.
+    let best = null;
     VARIANTS.forEach(v => {
-      if (!v.deadWeight) return; // skip the legacy dead-agnostic variant here
-      const r = packOnce(pieces, stockSizes, tolerance, rules, { ...v, repair: 1, repairNewSheet: 1 });
-      if (r.unplaced.length > best.unplaced.length) return; // never trade away a placement
-      if (r.deadCount !== 0) return;                        // all-or-nothing
-      if (r.sheets.length > sheetCap) return;                // hard cap: +1 sheet max
-      const c = cost(r);
-      if (!clean || c < clean.cost) clean = { ...r, cost: c, variant: v };
+      const res = packOnce(piecesArg, stockSizes, tolerance, rules, { ...v, repair: 1 });
+      const c = cost(res);
+      if (!best || c < best.cost) best = { ...res, cost: c, variant: v };
     });
-    if (clean) { clean.tradedSheet = clean.sheets.length > best.sheets.length; best = clean; }
+
+    // Stage 2: bounded trade — spend at most ONE extra stock sheet per thickness group,
+    // and only if that sheet buys a completely clean result (zero dead offcuts). This is
+    // deliberately all-or-nothing: a messy order with several dead strips that one sheet
+    // can't fully clean up is left as Stage 1 produced it, so this never spirals into
+    // buying sheets just to nibble at the problem.
+    if (rules.allowExtraSheet && best.deadCount > 0) {
+      const sheetCap = best.sheets.length + 1;
+      let clean = null;
+      VARIANTS.forEach(v => {
+        if (!v.deadWeight) return; // skip the legacy dead-agnostic variant here
+        const r = packOnce(piecesArg, stockSizes, tolerance, rules, { ...v, repair: 1, repairNewSheet: 1 });
+        if (r.unplaced.length > best.unplaced.length) return; // never trade away a placement
+        if (r.deadCount !== 0) return;                        // all-or-nothing
+        if (r.sheets.length > sheetCap) return;                // hard cap: +1 sheet max
+        const c = cost(r);
+        if (!clean || c < clean.cost) clean = { ...r, cost: c, variant: v };
+      });
+      if (clean) { clean.tradedSheet = clean.sheets.length > best.sheets.length; best = clean; }
+    }
+    return best;
   }
+
+  let best = packAllVariants(pieces);
+
+  // Stage 0 (tried last, kept only if it wins): batch big groups of identical-size pieces
+  // into fully tiled grid sheets (see tryGridBatching) before handing whatever's left to
+  // the normal search above. This is what closes the gap with how anh Tùng actually cuts a
+  // large batch by hand — deliberately shrinking every piece a little so the whole batch
+  // tiles one sheet cleanly, instead of the shelf-packer only shrinking a piece when it's
+  // the sole way to squeeze it into whatever gap happens to be open.
+  const gb = tryGridBatching(pieces, stockSizes, tolerance);
+  if (gb) {
+    const remBest = gb.remainderPieces.length
+      ? packAllVariants(gb.remainderPieces)
+      : { sheets: [], unplaced: [] };
+    const mergedSheets = [...gb.gridSheets, ...remBest.sheets];
+    const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
+    const c = cost(merged);
+    if (c < cost(best)) { merged.cost = c; best = merged; }
+  }
+
   return best;
 }
 
