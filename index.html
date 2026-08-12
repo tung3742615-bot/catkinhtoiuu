@@ -740,7 +740,17 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
   else if (cfg.sortKey === 'w') items.sort((a, b) => b.w - a.w || b.h - a.h);
   else items.sort((a, b) => b.h - a.h || b.w - a.w);
 
-  const S_SHRINK = 1e7, S_DEAD = 1e4; // shrink dominates dead-zone avoidance, which dominates tight-fit
+    // How much a millimetre of shrink "costs" when choosing where to put a piece.
+  //  - default (1e7): shrink dominates everything, so a piece is only ever cut
+  //    undersize when there is literally no other way to place it.
+  //  - 'cheap' (1e2): a millimetre of shrink costs about as much as a millimetre
+  //    of wasted width, so the packer will willingly give up a few mm on a piece
+  //    if that lets it fill the sheet tighter. This matches how the shop actually
+  //    cuts: the tolerance was set precisely because losing a few mm is acceptable,
+  //    and using up the whole sheet is worth more than hitting the nominal size.
+  //    Dead-zone avoidance (1e4) still outranks shrink, and the outer cost function
+  //    still tie-breaks on total shrink, so it never shrinks without a reason.
+  const S_SHRINK = cfg.shrinkCost === 'cheap' ? 1e2 : 1e7, S_DEAD = 1e4;
 
   let sheets = [], unplaced = [];
 
@@ -809,7 +819,9 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
         const cand = { stock: s, w: fw, h: fh, rot, shrink, area, dead, shrunk, reqW: w, reqH: h };
         if (!best) { best = cand; return; }
         if (cand.area !== best.area) { if (cand.area < best.area) best = cand; return; }
-        if (cand.shrunk !== best.shrunk) { if (cand.shrunk < best.shrunk) best = cand; return; }
+        // In 'cheap' mode an exact cut is no longer worth more than a clean offcut,
+        // so the "was it shrunk at all" gate is skipped and dead-zone avoidance moves up.
+        if (cfg.shrinkCost !== 'cheap' && cand.shrunk !== best.shrunk) { if (cand.shrunk < best.shrunk) best = cand; return; }
         if (cand.dead !== best.dead) { if (cand.dead < best.dead) best = cand; return; }
         if (cand.shrink < best.shrink) best = cand;
       });
@@ -932,10 +944,15 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
 
             const norm = { code: ev.code, w: Math.max(ev.reqW, ev.reqH), h: Math.min(ev.reqW, ev.reqH) };
 
+            // In 'cheap' mode we don't insist the relocated piece keeps its old shrink —
+            // any shrink is capped by the tolerance anyway, and clearing a dead strip is
+            // worth more than a couple of mm.
+            const shrinkOK = p2 => cfg.shrinkCost === 'cheap' || p2.shrink <= (ev.shrink || 0) + 1e-9;
+
             const p = findBestPlacement(norm, { si, hi });
             if (p) {
               applyPlacement(p, norm);
-              if (deadStripCount() < before && p.shrink <= (ev.shrink || 0) + 1e-9) {
+              if (deadStripCount() < before && shrinkOK(p)) {
                 repairMoves++; progress = true; break outer;
               }
               if (p.type === 'shelf') { const sh = sheets[p.si].shelves[p.hi]; sh.items.pop(); reflowX(sh); }
@@ -944,7 +961,7 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
 
             if (newSheets < maxNewSheets) {
               const alt = openNewSheetCandidate(norm);
-              if (alt && alt.shrink <= (ev.shrink || 0) + 1e-9) {
+              if (alt && shrinkOK(alt)) {
                 const ns = { stock: alt.stock, shelves: [] };
                 sheets.push(ns);
                 ns.shelves.push({ y: 0, height: alt.h, usedWidth: alt.w, items: [{ x: 0, w: alt.w, h: alt.h,
@@ -1117,7 +1134,15 @@ function maxCount(req, avail, tol){
 // ever kept by optimizeThickness if it actually beats the non-batched result on cost — so a
 // group that batches worse (e.g. because it was secretly a great filler for other shapes)
 // simply doesn't get used.
-function tryGridBatching(pieces, stockSizes, tolerance){
+// mode 'full'  — only lay out grid sheets that are COMPLETELY tiled; anything left
+//                 over goes back to the normal packer.
+// mode 'ceil'   — also allow a partially filled last sheet using the same grid
+//                 geometry. This is what makes "5 panes of 613x1000" fit on ONE sheet
+//                 (3 across at 610 + 2 across) instead of two: the shelf packer lays
+//                 pieces left-to-right at full size and only discovers it is 9mm short
+//                 when it reaches the third one, whereas planning the row up front
+//                 spreads that shortfall as 3mm on each of the three.
+function tryGridBatching(pieces, stockSizes, tolerance, mode){
   const groups = new Map();
   pieces.forEach(p => {
     if (!p.qty || !p.w || !p.h) return;
@@ -1154,32 +1179,39 @@ function tryGridBatching(pieces, stockSizes, tolerance){
       });
     });
     if (!bestPlan) return;
-    const sheetsNeeded = Math.floor(g.totalQty / bestPlan.capacity);
+    const cap = bestPlan.capacity;
+    // 'ceil' also tiles a partial final sheet; 'full' stops at whole sheets only.
+    const sheetsNeeded = mode === 'ceil'
+      ? Math.ceil(g.totalQty / cap)
+      : Math.floor(g.totalQty / cap);
     if (sheetsNeeded < 1) return;
+    // A partial sheet only earns its keep if the grid actually beats laying the pieces
+    // out one at a time, which needs at least a full row's worth to line up.
+    if (mode === 'ceil' && g.totalQty < Math.min(cap, bestPlan.cols + 1)) return;
 
     anyBatched = true;
-    let need = sheetsNeeded * bestPlan.capacity;
+    const need = Math.min(g.totalQty, sheetsNeeded * cap);
     const codePool = [];
     g.entries.forEach(e => { for (let i = 0; i < e.qty; i++) codePool.push(e.code); });
     const usedCodes = codePool.slice(0, need);
     const leftoverCodes = codePool.slice(need);
     let poolIdx = 0;
 
-    for (let s = 0; s < sheetsNeeded; s++) {
+    for (let s = 0; s < sheetsNeeded && poolIdx < usedCodes.length; s++) {
       const shelves = [];
-      for (let r = 0; r < bestPlan.rows; r++) {
+      for (let r = 0; r < bestPlan.rows && poolIdx < usedCodes.length; r++) {
         const items = [];
-        for (let c = 0; c < bestPlan.cols; c++) {
-          const code = usedCodes[poolIdx++] || '';
+        for (let c = 0; c < bestPlan.cols && poolIdx < usedCodes.length; c++) {
+          const code = usedCodes[poolIdx++];
           items.push({
             x: round1(c * bestPlan.colW), w: bestPlan.colW, h: bestPlan.rowH, code, rot: bestPlan.rot,
             shrink: bestPlan.shrink, reqW: bestPlan.rw, reqH: bestPlan.rh,
             shrinkW: round1(bestPlan.rw - bestPlan.colW), shrinkH: round1(bestPlan.rh - bestPlan.rowH)
           });
         }
-        shelves.push({ y: round1(r * bestPlan.rowH), height: bestPlan.rowH, usedWidth: round1(bestPlan.cols * bestPlan.colW), items });
+        if (items.length) shelves.push({ y: round1(r * bestPlan.rowH), height: bestPlan.rowH, usedWidth: round1(items.length * bestPlan.colW), items });
       }
-      gridSheets.push({ stock: bestPlan.stock, shelves });
+      if (shelves.length) gridSheets.push({ stock: bestPlan.stock, shelves });
     }
 
     g.batched = true;
@@ -1216,6 +1248,15 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
     { sortKey: 'h',    deadWeight: 1, fitKey: 'w' },
     { sortKey: 'area', deadWeight: 1, fitKey: 'w' },
     { sortKey: 'w',    deadWeight: 1, fitKey: 'w' },
+    // "Shrink is cheap" variants: the shop's actual habit is to give a piece up to the
+    // allowed tolerance so the sheet gets used up, rather than hold out for the exact
+    // nominal size and waste the remainder. These let the packer make that trade; the
+    // cost function below still only keeps the result if it genuinely comes out ahead.
+    { sortKey: 'h',    deadWeight: 1, shrinkCost: 'cheap' },
+    { sortKey: 'area', deadWeight: 1, shrinkCost: 'cheap' },
+    { sortKey: 'w',    deadWeight: 1, shrinkCost: 'cheap' },
+    { sortKey: 'h',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap' },
+    { sortKey: 'w',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap' },
   ];
   const cost = r => r.unplaced.length * W_UNPLACED
     + r.sheets.length * W_SHEET
@@ -1264,8 +1305,9 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
   // large batch by hand — deliberately shrinking every piece a little so the whole batch
   // tiles one sheet cleanly, instead of the shelf-packer only shrinking a piece when it's
   // the sole way to squeeze it into whatever gap happens to be open.
-  const gb = tryGridBatching(pieces, stockSizes, tolerance);
-  if (gb) {
+  ['full', 'ceil'].forEach(mode => {
+    const gb = tryGridBatching(pieces, stockSizes, tolerance, mode);
+    if (!gb) return;
     const remBest = gb.remainderPieces.length
       ? packAllVariants(gb.remainderPieces)
       : { sheets: [], unplaced: [] };
@@ -1273,7 +1315,7 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
     const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
     const c = cost(merged);
     if (c < cost(best)) { merged.cost = c; best = merged; }
-  }
+  });
 
   return best;
 }
