@@ -68,6 +68,9 @@
 
 <header>
   <h1>🪟 Cắt Kính Tối Ưu</h1>
+  <!-- Bump this whenever the algorithm changes: it is the only way to tell at a glance
+       whether the browser is showing a fresh copy or a cached one. -->
+  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 13/08/2026-g · bỏ cột Dày + nhập bằng giọng nói</div>
 </header>
 
 <main>
@@ -115,6 +118,10 @@
       <label class="muted" style="flex:1;">Kính thừa BỎ ĐI được khi có 1 chiều ≤ (mm)</label>
       <input type="number" id="maxTrashInput" style="width:80px;">
     </div>
+    <div class="row">
+      <label class="muted" style="flex:1;">Trong CÙNG một hàng, cho phép các mã lệch chiều cao tối đa (mm) — phần thừa phía trên tấm ngắn hơn coi như bỏ đi</label>
+      <input type="number" id="maxRowGapInput" style="width:80px;">
+    </div>
     <div id="offcutRuleHint" class="muted"></div>
     <div class="row" style="margin-top:10px;align-items:flex-start;">
       <input type="checkbox" id="allowExtraSheetInput" style="margin-top:2px;">
@@ -138,24 +145,30 @@
     </div>
 
     <div class="row">
-      <button class="btn block" id="btnCamera">📷 Chụp / chọn ảnh giấy viết tay</button>
+      <button class="btn" id="btnCamera" style="flex:1;min-width:140px;">📷 Chụp ảnh</button>
+      <button class="btn secondary" id="btnGallery" style="flex:1;min-width:140px;">🖼️ Chọn ảnh từ thư viện</button>
     </div>
+    <p class="muted" style="margin-top:-2px;">Trên máy tính: có thể copy ảnh rồi bấm Ctrl+V ngay trên trang để dán ảnh vào.</p>
     <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+    <input type="file" id="galleryInput" accept="image/*" class="hidden">
     <img id="previewImg" class="thumb hidden">
     <div id="ocrStatus"></div>
 
     <div class="table-scroll">
       <table id="demandTable" style="margin-top:10px;">
         <thead><tr>
-          <th class="col-code">Mã</th><th class="col-num">Dài</th><th class="col-num">Rộng</th><th class="col-qty">SL</th><th class="col-th">Dày</th><th class="col-del"></th>
+          <th class="col-code">Mã</th><th class="col-num">Dài</th><th class="col-num">Rộng</th><th class="col-qty">SL</th><th class="col-del"></th>
         </tr></thead>
         <tbody></tbody>
       </table>
     </div>
+    <p class="muted" style="margin-top:6px;">Độ dày lấy theo ô "Độ dày kính cho ảnh sắp chụp" ở trên tại thời điểm thêm dòng — đổi độ dày ở đó trước khi thêm dòng cho lô kính khác độ dày.</p>
     <div class="row" style="margin-top:8px;">
       <button class="btn secondary small" id="addDemandRow">+ Thêm dòng thủ công</button>
       <button class="btn secondary small" id="clearDemandTable" style="color:#fca5a5;">🗑️ Xóa bảng tính</button>
+      <button class="btn secondary small" id="btnVoiceToggle">🎤 Nhập bằng giọng nói: TẮT</button>
     </div>
+    <div id="voiceStatus" class="muted" style="margin-top:4px;"></div>
   </div>
 
   <button class="btn big" id="btnOptimize">🔧 Tối ưu cắt</button>
@@ -168,7 +181,7 @@
 
 <script>
 /* ================= STORAGE ================= */
-const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash', allowExtraSheet:'ck_allow_extra_sheet' };
+const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash', maxRowGap:'ck_max_row_gap', allowExtraSheet:'ck_allow_extra_sheet' };
 const DEFAULT_STOCK = [
   {thickness:3,  sizes:[{w:1520,h:2140}]},
   {thickness:4,  sizes:[{w:1520,h:2140},{w:1680,h:2140}]},
@@ -201,6 +214,8 @@ function loadMinKeep(){ const v = parseFloat(localStorage.getItem(LS_KEYS.minKee
 function saveMinKeep(v){ localStorage.setItem(LS_KEYS.minKeep, String(v)); }
 function loadMaxTrash(){ const v = parseFloat(localStorage.getItem(LS_KEYS.maxTrash)); return isNaN(v) ? 100 : v; }
 function saveMaxTrash(v){ localStorage.setItem(LS_KEYS.maxTrash, String(v)); }
+function loadMaxRowGap(){ const v = parseFloat(localStorage.getItem(LS_KEYS.maxRowGap)); return isNaN(v) ? 60 : v; }
+function saveMaxRowGap(v){ localStorage.setItem(LS_KEYS.maxRowGap, String(v)); }
 function loadAllowExtraSheet(){ const v = localStorage.getItem(LS_KEYS.allowExtraSheet); return v===null ? true : v==='1'; }
 function saveAllowExtraSheet(v){ localStorage.setItem(LS_KEYS.allowExtraSheet, v ? '1' : '0'); }
 
@@ -211,6 +226,7 @@ let state = {
   captureThickness: loadCaptureThickness(),
   minKeep: loadMinKeep(),
   maxTrash: loadMaxTrash(),
+  maxRowGap: loadMaxRowGap(),
   allowExtraSheet: loadAllowExtraSheet(),
   learning: null,
   nextId: 1,
@@ -480,6 +496,11 @@ document.getElementById('minKeepInput').addEventListener('change', e=>{
   saveMinKeep(state.minKeep);
   renderOffcutRuleHint();
 });
+document.getElementById('maxRowGapInput').value = state.maxRowGap;
+document.getElementById('maxRowGapInput').addEventListener('change', e=>{
+  state.maxRowGap = Math.max(0, parseFloat(e.target.value)||0);
+  saveMaxRowGap(state.maxRowGap);
+});
 document.getElementById('maxTrashInput').value = state.maxTrash;
 document.getElementById('maxTrashInput').addEventListener('change', e=>{
   state.maxTrash = Math.max(0, parseFloat(e.target.value)||0);
@@ -555,8 +576,6 @@ function renderDemandTable(){
       <td><input type="text" data-id="${row.id}" data-f="code" value="${row.code ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="w" value="${row.w ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="h" value="${row.h ?? ''}"></td>
-      <td><input type="number" data-id="${row.id}" data-f="qty" value="${row.qty ?? 1}"></td>
-      <td><input type="number" data-id="${row.id}" data-f="thickness" value="${row.thickness ?? ''}"></td>
       <td class="col-del"><button class="del-btn" data-id="${row.id}">✕</button></td>
     `;
     tbody.appendChild(tr);
@@ -569,6 +588,7 @@ function renderDemandTable(){
       row[f] = (f==='code' || f==='ghichu') ? e.target.value : parseFloat(e.target.value)||0;
       saveDemand();
     });
+    if(voiceModeOn) attachVoiceInput(inp);
   });
   tbody.querySelectorAll('.del-btn').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -579,7 +599,7 @@ function renderDemandTable(){
   });
 }
 document.getElementById('addDemandRow').addEventListener('click', ()=>{
-  state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness: state.stock[0]?.thickness || '', ghichu:''});
+  state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness: state.captureThickness || '', ghichu:''});
   saveDemand(); renderDemandTable();
 });
 document.getElementById('clearDemandTable').addEventListener('click', ()=>{
@@ -593,23 +613,181 @@ document.getElementById('clearDemandTable').addEventListener('click', ()=>{
   showMsg('ok', 'Đã xóa bảng tính.');
 });
 
+/* ================= NHẬP LIỆU BẰNG GIỌNG NÓI ================= */
+// Bấm vào 1 ô trong bảng (Mã/Dài/Rộng/SL) rồi đọc số/mã — điền xong tự nhảy sang ô kế
+// tiếp (Mã→Dài→Rộng→SL→Mã dòng mới) để nhập cả dòng mà không cần chạm bàn phím.
+// Cần Chrome/Edge và trang chạy qua https (hoặc localhost) — mở trực tiếp bằng file://
+// trên máy có thể bị trình duyệt chặn micro.
+let voiceModeOn = false;
+let activeRecognition = null;
+const FIELD_LABEL = { code:'Mã', w:'Dài', h:'Rộng', qty:'SL' };
+const FIELD_ORDER = ['code','w','h','qty'];
+
+function getSpeechRecognitionCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
+
+// parseVietnameseNumber: Chrome's Vietnamese speech recognition almost always already
+// transcribes spoken numbers as digits (e.g. saying "sáu trăm" comes back as "600"), so
+// the digit-extraction path below covers the normal case. The spelled-out-word parser is
+// a best-effort fallback for the rarer case where it comes back as words.
+function parseVietnameseNumber(raw){
+  if(raw==null) return null;
+  let s = String(raw).toLowerCase().trim();
+  s = s.replace(/\b(mi li mét|milimét|milimet|mm|xăng ti mét|cm|phân|li|ly)\b/g,'').trim();
+  const digitMatch = s.match(/-?\d+(?:[.,]\d+)?/);
+  if(digitMatch) return parseFloat(digitMatch[0].replace(',', '.'));
+
+  const ONES = {'không':0,'một':1,'mốt':1,'hai':2,'ba':3,'tư':4,'bốn':4,'năm':5,'lăm':5,'nhăm':5,'sáu':6,'bảy':7,'bẩy':7,'tám':8,'chín':9};
+  const words = s.replace(/[^\p{L}\s]/gu,' ').split(/\s+/).filter(Boolean);
+  if(!words.length) return null;
+
+  function parseUnder1000(ws){
+    let i=0, val=0;
+    if(i<ws.length-1 && ws[i] in ONES && ws[i+1]==='trăm'){
+      val += ONES[ws[i]]*100; i+=2;
+      if(i<ws.length && (ws[i]==='linh'||ws[i]==='lẻ')){ i++; if(i<ws.length && ws[i] in ONES){ val+=ONES[ws[i]]; i++; } return val; }
+    }
+    if(i<ws.length && ws[i]==='mười'){
+      val += 10; i++;
+      if(i<ws.length && ws[i] in ONES){ val += (ws[i]==='lăm'?5:ONES[ws[i]]); i++; }
+      return val;
+    }
+    if(i<ws.length-1 && ws[i] in ONES && ws[i+1]==='mươi'){
+      val += ONES[ws[i]]*10; i+=2;
+      if(i<ws.length){
+        if(ws[i]==='mốt') val+=1;
+        else if(ws[i]==='lăm') val+=5;
+        else if(ws[i] in ONES) val+=ONES[ws[i]];
+      }
+      return val;
+    }
+    if(i<ws.length && ws[i] in ONES) return ONES[ws[i]];
+    return val;
+  }
+
+  const kIdx = words.findIndex(w=>w==='nghìn'||w==='ngàn');
+  let total;
+  if(kIdx>=0){
+    const thousands = parseUnder1000(words.slice(0,kIdx));
+    const rest = words.slice(kIdx+1);
+    total = thousands*1000 + (rest.length ? parseUnder1000(rest) : 0);
+  } else {
+    total = parseUnder1000(words);
+  }
+  return (total || words.includes('không')) ? total : null;
+}
+
+function updateVoiceButton(){
+  document.getElementById('btnVoiceToggle').textContent = `🎤 Nhập bằng giọng nói: ${voiceModeOn ? 'BẬT' : 'TẮT'}`;
+}
+document.getElementById('btnVoiceToggle').addEventListener('click', ()=>{
+  if(!voiceModeOn && !getSpeechRecognitionCtor()){
+    showMsg('warn', 'Trình duyệt này không hỗ trợ nhận diện giọng nói. Dùng Chrome hoặc Edge trên máy tính/điện thoại Android.');
+    return;
+  }
+  voiceModeOn = !voiceModeOn;
+  updateVoiceButton();
+  document.getElementById('voiceStatus').textContent = voiceModeOn ? 'Đã bật — bấm vào 1 ô trong bảng rồi đọc.' : '';
+  renderDemandTable();
+});
+
+function attachVoiceInput(inp){
+  inp.addEventListener('focus', ()=> startVoiceCapture(inp));
+}
+
+function startVoiceCapture(inp){
+  const Ctor = getSpeechRecognitionCtor();
+  const statusEl = document.getElementById('voiceStatus');
+  if(!Ctor) return;
+  if(activeRecognition){ try{ activeRecognition.abort(); }catch(e){} activeRecognition = null; }
+
+  const f = inp.dataset.f;
+  const rec = new Ctor();
+  activeRecognition = rec;
+  rec.lang = 'vi-VN';
+  rec.continuous = false;
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  statusEl.innerHTML = `<span class="spinner"></span> Đang nghe (ô "${FIELD_LABEL[f]||f}")... nói xong đợi 1 chút.`;
+
+  rec.onresult = (e)=>{
+    const transcript = e.results?.[0]?.[0]?.transcript || '';
+    let val, ok = true;
+    if(f === 'code'){
+      val = transcript.trim().replace(/[.。]$/,'');
+    } else {
+      const n = parseVietnameseNumber(transcript);
+      ok = n != null && !isNaN(n);
+      val = ok ? n : '';
+    }
+    if(ok){
+      inp.value = val;
+      inp.dispatchEvent(new Event('change'));
+      statusEl.textContent = `Đã nhận "${transcript}" → ${FIELD_LABEL[f]||f}: ${val}`;
+      const idx = FIELD_ORDER.indexOf(f);
+      const tr = inp.closest('tr');
+      inp.blur();
+      if(idx >= 0 && idx < FIELD_ORDER.length - 1){
+        const next = tr.querySelector(`input[data-f="${FIELD_ORDER[idx+1]}"]`);
+        if(next) setTimeout(()=>next.focus(), 80);
+      } else {
+        // Vừa đọc xong SL của dòng cuối cùng — mở dòng mới và chuyển sang ô Mã luôn.
+        const nextRowTr = tr.nextElementSibling;
+        if(nextRowTr){
+          const nextCode = nextRowTr.querySelector('input[data-f="code"]');
+          if(nextCode) setTimeout(()=>nextCode.focus(), 80);
+        } else {
+          document.getElementById('addDemandRow').click();
+          setTimeout(()=>{
+            const rows = document.querySelectorAll('#demandTable tbody tr');
+            const last = rows[rows.length-1];
+            const codeInp = last && last.querySelector('input[data-f="code"]');
+            if(codeInp) codeInp.focus();
+          }, 80);
+        }
+      }
+    } else {
+      statusEl.innerHTML = `<span class="warn" style="padding:2px 6px;border-radius:6px;">Không nhận ra số từ "${transcript}" — bấm lại vào ô để thử lại.</span>`;
+      inp.blur();
+    }
+  };
+  rec.onerror = (e)=>{
+    if(e.error === 'no-speech') statusEl.textContent = 'Không nghe thấy gì — bấm lại vào ô để thử lại.';
+    else if(e.error === 'not-allowed' || e.error === 'service-not-allowed') statusEl.textContent = 'Trình duyệt chưa được cấp quyền micro. Cho phép quyền rồi thử lại.';
+    else statusEl.textContent = `Lỗi nhận diện giọng nói (${e.error}) — bấm lại vào ô để thử lại.`;
+    inp.blur();
+  };
+  rec.onend = ()=>{ if(activeRecognition===rec) activeRecognition=null; };
+  try{ rec.start(); }catch(e){ statusEl.textContent = 'Không mở được micro — thử bấm lại vào ô.'; }
+}
+
 function showMsg(type, text){
   const el = document.getElementById('globalMsg');
   el.innerHTML = `<div class="${type}">${text}</div>`;
   setTimeout(()=>{ if(el.innerHTML.includes(text)) el.innerHTML=''; }, 6000);
 }
 
-/* ================= CAMERA + GEMINI OCR ================= */
-document.getElementById('btnCamera').addEventListener('click', ()=>{
+/* ================= CAMERA + GALLERY + PASTE + GEMINI OCR ================= */
+function canCaptureImage(){
+  // Cảnh báo được ghi cả vào #ocrStatus (ngay dưới nút, luôn nằm trong tầm nhìn)
+  // lẫn #globalMsg (đầu trang) — vì #globalMsg ở đầu trang nên nếu anh đang cuộn
+  // xuống mục 4 để bấm nút, dễ không thấy nó hiện lên rồi tự mất sau vài giây.
+  const statusEl = document.getElementById('ocrStatus');
   const key = loadApiKey();
-  if(!key){ showMsg('warn','Chưa có Gemini API key. Dán vào mục 1 ở trên rồi bấm Lưu.'); return; }
-  if(!state.captureThickness || state.captureThickness<=0){ showMsg('warn','Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay trên nút chụp rồi thử lại.'); return; }
-  document.getElementById('fileInput').click();
-});
+  if(!key){
+    statusEl.innerHTML = `<div class="warn">Chưa có Gemini API key. Kéo lên mục 1 ở đầu trang, dán key rồi bấm Lưu, sau đó quay lại bấm nút này.</div>`;
+    showMsg('warn','Chưa có Gemini API key. Dán vào mục 1 ở trên rồi bấm Lưu.');
+    return false;
+  }
+  if(!state.captureThickness || state.captureThickness<=0){
+    statusEl.innerHTML = `<div class="warn">Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay phía trên nút rồi bấm lại.</div>`;
+    showMsg('warn','Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay trên nút chụp rồi thử lại.');
+    return false;
+  }
+  return true;
+}
 
-document.getElementById('fileInput').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
+function processImageFile(file){
+  if(!file || !file.type || !file.type.startsWith('image/')) return;
   const previewImg = document.getElementById('previewImg');
   const reader = new FileReader();
   reader.onload = async ()=>{
@@ -619,6 +797,42 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
     await runOCR(base64, file.type || 'image/jpeg', file.name || 'ảnh');
   };
   reader.readAsDataURL(file);
+}
+
+document.getElementById('btnCamera').addEventListener('click', ()=>{
+  if(!canCaptureImage()) return;
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('btnGallery').addEventListener('click', ()=>{
+  if(!canCaptureImage()) return;
+  document.getElementById('galleryInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  processImageFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+document.getElementById('galleryInput').addEventListener('change', (e)=>{
+  processImageFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Dán ảnh trực tiếp bằng Ctrl+V — copy ảnh (VD: từ Zalo, email, ứng dụng khác) rồi bấm Ctrl+V ngay trên trang
+document.addEventListener('paste', (e)=>{
+  if(!e.clipboardData || !e.clipboardData.items) return;
+  for(const item of e.clipboardData.items){
+    if(item.type && item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      if(file){
+        if(!canCaptureImage()) return;
+        e.preventDefault();
+        processImageFile(file);
+      }
+      break;
+    }
+  }
 });
 
 function buildPrompt(learningContext){
@@ -653,6 +867,33 @@ Mỗi phần tử JSON có dạng:
 {"code": "mã/ký hiệu nếu có, không thì để rỗng", "w": số (dài, mm), "h": số (rộng, mm), "qty": số lượng, "ghichu": "màu kính / loại kính / yêu cầu mài cạnh nếu có, không thì để rỗng"}`;
 }
 
+// Gemini's free tier model occasionally answers "currently experiencing high demand" —
+// Google's own wording says these spikes are usually short-lived, so it is worth a few
+// automatic retries with a growing pause before bothering the user with a manual retry.
+function isOverloadError(status, msg){
+  if(status===503 || status===429) return true;
+  return /overloaded|high demand|unavailable/i.test(String(msg||''));
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+async function callGemini(prompt, base64, mimeType, apiKey){
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type: mimeType, data: base64}} ] }],
+      generationConfig:{ responseMimeType:'application/json' }
+    })
+  });
+  const data = await resp.json();
+  if(!resp.ok){
+    const err = new Error(data?.error?.message || 'Lỗi gọi Gemini API');
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
 async function runOCR(base64, mimeType, imageLabel){
   const statusEl = document.getElementById('ocrStatus');
   statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Đang đọc số đo từ ảnh...</div>`;
@@ -661,17 +902,20 @@ async function runOCR(base64, mimeType, imageLabel){
   const prompt = buildPrompt(learningContext);
 
   try{
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type: mimeType, data: base64}} ] }],
-        generationConfig:{ responseMimeType:'application/json' }
-      })
-    });
-    const data = await resp.json();
-    if(!resp.ok){
-      throw new Error(data?.error?.message || 'Lỗi gọi Gemini API');
+    const MAX_TRY = 4, DELAYS = [1500, 3000, 6000];
+    let data;
+    for(let attempt=0; ; attempt++){
+      try{
+        data = await callGemini(prompt, base64, mimeType, apiKey);
+        break;
+      }catch(err){
+        if(attempt < MAX_TRY-1 && isOverloadError(err.status, err.message)){
+          statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Model Gemini đang quá tải, tự thử lại (${attempt+1}/${MAX_TRY-1})...</div>`;
+          await sleep(DELAYS[attempt] || 6000);
+          continue;
+        }
+        throw err;
+      }
     }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if(!text) throw new Error('Không nhận được kết quả từ Gemini.');
@@ -700,7 +944,19 @@ async function runOCR(base64, mimeType, imageLabel){
     renderDemandTable();
     statusEl.innerHTML = `<div class="ok">Đã đọc thêm ${arr.length} dòng. Kiểm tra lại bảng bên dưới, sửa nếu cần — mỗi chỗ anh sửa sẽ giúp AI đọc chính xác hơn ở lần sau.</div>`;
   }catch(err){
-    statusEl.innerHTML = `<div class="err">Lỗi: ${err.message}</div>`;
+    const overloaded = isOverloadError(err.status, err.message);
+    const msg = overloaded
+      ? 'Model Gemini đang quá tải, đã tự thử lại vài lần nhưng chưa được. Đợi một chút rồi bấm thử lại.'
+      : `Lỗi: ${err.message}`;
+    statusEl.innerHTML = `<div class="err">${msg}</div>`;
+    if(overloaded){
+      const btn = document.createElement('button');
+      btn.className = 'btn secondary small';
+      btn.style.marginTop = '8px';
+      btn.textContent = '🔁 Thử lại';
+      btn.addEventListener('click', () => runOCR(base64, mimeType, imageLabel));
+      statusEl.appendChild(btn);
+    }
   }
 }
 
@@ -740,7 +996,7 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
   else if (cfg.sortKey === 'w') items.sort((a, b) => b.w - a.w || b.h - a.h);
   else items.sort((a, b) => b.h - a.h || b.w - a.w);
 
-    // How much a millimetre of shrink "costs" when choosing where to put a piece.
+  // How much a millimetre of shrink "costs" when choosing where to put a piece.
   //  - default (1e7): shrink dominates everything, so a piece is only ever cut
   //    undersize when there is literally no other way to place it.
   //  - 'cheap' (1e2): a millimetre of shrink costs about as much as a millimetre
@@ -754,7 +1010,75 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
 
   let sheets = [], unplaced = [];
 
-  function findBestPlacement(it, exclude) {
+  /* ---------- "Chia hụt trước" (shrink-first) ----------------------------
+     The shop's own method: line a whole row up first, add up the sizes, see how
+     far past the stock sheet the total runs, then take that shortfall off EVERY
+     piece in the row equally — instead of cutting each piece to its exact size
+     and discovering at the last one that the row is a few mm short.
+     These helpers do exactly that, and work for a row of mixed codes just as
+     well as a row of identical ones, because the shortfall is shared out by
+     distributeEven over whatever is standing in the row.
+     Only used by variants with cfg.shrinkFirst, so the old behaviour stays in
+     the running as a floor.                                                */
+
+  // How many mm of width can still be clawed back from the pieces already on a
+  // row — each piece may only lose up to `tolerance` versus its ordered size.
+  function widthSlack(shelf){
+    let s = 0;
+    shelf.items.forEach(i => { s = round1(s + Math.max(0, tolerance - (i.reqW - i.w))); });
+    return s;
+  }
+  // Same question for a whole row's height. A piece only has to give something
+  // up once the row gets shorter than the piece itself, so headroom counts too.
+  function shelfHeightSlack(shelf){
+    let s = tolerance;
+    shelf.items.forEach(i => {
+      const own = Math.max(0, tolerance - (i.reqH - i.h));   // mm this piece may still lose
+      const clear = Math.max(0, round1(shelf.height - i.h)); // mm of headroom it already has
+      s = Math.min(s, round1(own + clear));
+    });
+    return Math.max(0, round1(s));
+  }
+  // Plan an even split of `deficit` mm over the pieces already on the row plus the
+  // newcomer (last slot). Returns null when the row simply cannot absorb it.
+  function planRowShrink(caps, deficit){
+    if (deficit <= OFFCUT_EPS) return null;
+    const room = round1(caps.reduce((a, b) => a + b, 0));
+    if (room < deficit - 1e-6) return null;
+    const alloc = distributeEven(caps, deficit);
+    // distributeEven settles in 0.1mm steps, so an even split like 10mm over 3 pieces
+    // leaves a sliver behind. Hand the sliver to whoever still has room — without it
+    // the row would stay a hair too long and the whole plan would be thrown away.
+    let left = round1(deficit - alloc.reduce((a, b) => a + b, 0));
+    for (let i = 0; i < alloc.length && left > OFFCUT_EPS; i++) {
+      const take = Math.min(left, round1(caps[i] - alloc[i]));
+      if (take > OFFCUT_EPS) { alloc[i] = round1(alloc[i] + take); left = round1(left - take); }
+    }
+    if (left > OFFCUT_EPS) return null;
+    return alloc;
+  }
+  function applyItemShrink(i){ i.shrink = round1((i.shrinkW || 0) + (i.shrinkH || 0)); }
+  function squeezeShelfWidths(shelf, alloc){
+    shelf.items.forEach((i, k) => {
+      if (alloc[k] > OFFCUT_EPS){
+        i.w = round1(i.reqW - round1((i.reqW - i.w) + alloc[k]));
+        i.shrinkW = round1(i.reqW - i.w);
+        applyItemShrink(i);
+      }
+    });
+    reflowX(shelf);
+  }
+  function squeezeShelfHeight(shelf, give){
+    if (give <= OFFCUT_EPS) return;
+    const nh = round1(shelf.height - give);
+    shelf.items.forEach(i => {
+      if (i.h > nh){ i.h = nh; i.shrinkH = round1(i.reqH - i.h); applyItemShrink(i); }
+    });
+    shelf.height = nh;
+  }
+
+  function findBestPlacement(it, exclude, allowSqueeze) {
+    const squeezeOn = allowSqueeze && cfg.shrinkFirst;
     let best = null;
     sheets.forEach((sheet, si) => {
       sheet.shelves.forEach((shelf, hi) => {
@@ -762,18 +1086,30 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
         const availW = sheet.stock.w - shelf.usedWidth;
         const availH = shelf.height;
         [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
-          const fw = fitDim(w, availW, tolerance);
           const fh = fitDim(h, availH, tolerance);
-          if (fw == null || fh == null) return;
-          const shrink = (w - fw) + (h - fh);
+          if (fh == null) return;
+          let fw = fitDim(w, availW, tolerance), sqAlloc = null, sqW = 0;
+          if (fw == null && squeezeOn) {
+            // Row does not reach — share the shortfall out over the whole row.
+            const caps = shelf.items.map(i => Math.max(0, tolerance - (i.reqW - i.w)));
+            caps.push(tolerance);
+            const alloc = planRowShrink(caps, round1(w - availW));
+            if (alloc) {
+              fw = round1(w - alloc[alloc.length - 1]);
+              sqAlloc = alloc.slice(0, alloc.length - 1);
+              sqW = round1(alloc.slice(0, alloc.length - 1).reduce((a, b) => a + b, 0));
+            }
+          }
+          if (fw == null) return;
+          const shrink = (w - fw) + (h - fh) + sqW;
           const leftover = availH - fh;
-          const remWAfter = round1(availW - fw);
+          const remWAfter = round1(availW + sqW - fw);
           const dead = cfg.deadWeight
             ? (classifyOffcut(remWAfter, shelf.height, rules) === 'dead' ? 1 : 0)
             : 0;
           const tie = cfg.fitKey === 'w' ? remWAfter : leftover;
           const score = shrink * S_SHRINK + dead * S_DEAD + tie;
-          if (!best || score < best.score) best = { type: 'shelf', si, hi, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
+          if (!best || score < best.score) best = { type: 'shelf', si, hi, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h, sqW: sqAlloc };
         });
       });
       const usedHeight = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
@@ -781,19 +1117,33 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
       const availW2 = sheet.stock.w;
       [[it.w, it.h, false], [it.h, it.w, true]].forEach(([w, h, rot]) => {
         const fw = fitDim(w, availW2, tolerance);
-        const fh = fitDim(h, availH2, tolerance);
-        if (fw == null || fh == null) return;
-        const shrink = (w - fw) + (h - fh);
-        const leftover = (availH2 - fh) + 1; // tiny penalty vs using an existing shelf
+        if (fw == null) return;
+        let fh = fitDim(h, availH2, tolerance), sqAlloc = null, sqH = 0;
+        if (fh == null && squeezeOn && sheet.shelves.length) {
+          // Stack does not reach the bottom edge — share the shortfall out over
+          // every row on the sheet plus the new one. This is what lets e.g. an
+          // 1834 band sit on top of a 1224 band inside 3050mm (1830 + 1220).
+          const caps = sheet.shelves.map(shelfHeightSlack);
+          caps.push(tolerance);
+          const alloc = planRowShrink(caps, round1(h - availH2));
+          if (alloc) {
+            fh = round1(h - alloc[alloc.length - 1]);
+            sqAlloc = alloc.slice(0, alloc.length - 1);
+            sqH = round1(alloc.slice(0, alloc.length - 1).reduce((a, b) => a + b, 0));
+          }
+        }
+        if (fh == null) return;
+        const shrink = (w - fw) + (h - fh) + sqH;
+        const leftover = (availH2 + sqH - fh) + 1; // tiny penalty vs using an existing shelf
         const remWAfter = round1(availW2 - fw);
-        const bandAfter = round1(availH2 - fh);
+        const bandAfter = round1(availH2 + sqH - fh);
         const dead = cfg.deadWeight
           ? (classifyOffcut(remWAfter, fh, rules) === 'dead' ? 1 : 0)
             + (classifyOffcut(sheet.stock.w, bandAfter, rules) === 'dead' ? 1 : 0)
           : 0;
         const tie = cfg.fitKey === 'w' ? (remWAfter + 1) : leftover;
         const score = shrink * S_SHRINK + dead * S_DEAD + tie;
-        if (!best || score < best.score) best = { type: 'newShelf', si, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h };
+        if (!best || score < best.score) best = { type: 'newShelf', si, w: fw, h: fh, rot, shrink, score, reqW: w, reqH: h, sqH: sqAlloc };
       });
     });
     return best;
@@ -830,22 +1180,9 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
   }
 
   for (const it of items) {
-    const placement = findBestPlacement(it);
+    const placement = findBestPlacement(it, null, true);
     if (placement) {
-      const item = { x: 0, w: placement.w, h: placement.h, code: it.code, rot: placement.rot,
-        shrink: placement.shrink, reqW: placement.reqW, reqH: placement.reqH,
-        shrinkW: round1(placement.reqW - placement.w), shrinkH: round1(placement.reqH - placement.h) };
-      if (placement.type === 'shelf') {
-        const shelf = sheets[placement.si].shelves[placement.hi];
-        item.x = shelf.usedWidth;
-        shelf.items.push(item);
-        shelf.usedWidth += placement.w;
-      } else {
-        const sheet = sheets[placement.si];
-        const usedHeight = sheet.shelves.reduce((s, sh) => s + sh.height, 0);
-        const shelf = { y: usedHeight, height: placement.h, usedWidth: placement.w, items: [item] };
-        sheet.shelves.push(shelf);
-      }
+      applyPlacement(placement, it);
       continue;
     }
     const cand = openNewSheetCandidate(it);
@@ -910,13 +1247,21 @@ function packOnce(pieces, stockSizes, tolerance, rules, cfg) {
   function reflowX(shelf){ let x = 0; shelf.items.forEach(i => { i.x = x; x = round1(x + i.w); }); shelf.usedWidth = x; }
   function reflowY(sheet){ let y = 0; sheet.shelves.forEach(sh => { sh.y = y; y = round1(y + sh.height); }); }
   function applyPlacement(p, src){
-    const item = { x: 0, w: p.w, h: p.h, code: src.code, rot: p.rot, shrink: p.shrink,
+    // NB: p.shrink is the cost of the whole move (this piece plus whatever the rest
+    // of the row gives up); the item itself only ever carries its own shortfall.
+    const item = { x: 0, w: p.w, h: p.h, code: src.code, rot: p.rot,
+      shrink: round1((p.reqW - p.w) + (p.reqH - p.h)),
       reqW: p.reqW, reqH: p.reqH, shrinkW: round1(p.reqW - p.w), shrinkH: round1(p.reqH - p.h) };
     if (p.type === 'shelf') {
       const sh = sheets[p.si].shelves[p.hi];
+      // Row planned short: take the agreed share off each piece already standing
+      // in it before the newcomer goes on the end.
+      if (p.sqW) squeezeShelfWidths(sh, p.sqW);
       item.x = sh.usedWidth; sh.items.push(item); sh.usedWidth = round1(sh.usedWidth + p.w);
     } else {
       const s = sheets[p.si];
+      // Same for the vertical stack when the new row needs a few mm off the rows above.
+      if (p.sqH) { p.sqH.forEach((g, k) => squeezeShelfHeight(s.shelves[k], g)); reflowY(s); }
       const uh = s.shelves.reduce((a, x) => a + x.height, 0);
       s.shelves.push({ y: uh, height: p.h, usedWidth: p.w, items: [item] });
     }
@@ -1142,7 +1487,7 @@ function maxCount(req, avail, tol){
 //                 pieces left-to-right at full size and only discovers it is 9mm short
 //                 when it reaches the third one, whereas planning the row up front
 //                 spreads that shortfall as 3mm on each of the three.
-function tryGridBatching(pieces, stockSizes, tolerance, mode){
+function tryGridBatching(pieces, stockSizes, tolerance, mode, stockPick){
   const groups = new Map();
   pieces.forEach(p => {
     if (!p.qty || !p.w || !p.h) return;
@@ -1173,9 +1518,23 @@ function tryGridBatching(pieces, stockSizes, tolerance, mode){
         const colW = Math.min(rw, floor1(s.w / cols));
         const rowH = Math.min(rh, floor1(s.h / rows));
         const shrink = round1((rw - colW) + (rh - rowH));
-        const cand = { stock: s, cols, rows, capacity, colW, rowH, rw, rh, rot, shrink };
-        if (!bestPlan || cand.capacity > bestPlan.capacity ||
-            (cand.capacity === bestPlan.capacity && cand.shrink < bestPlan.shrink)) bestPlan = cand;
+        // Two honest ways to judge a stock size for a batch, and no way to know up
+        // front which one wins overall — so both are offered as separate layouts and
+        // optimizeThickness's cost function picks between the finished results.
+        //   'capacity' — most pieces per sheet (the original rule)
+        //   'glass'    — least raw glass for the whole batch, counting whole sheets.
+        //                An 1830x2440 holding 8 and a 3050x2140 holding 8 are not the
+        //                same deal: the small one wastes 2m² less.
+        const glass = Math.ceil(g.totalQty / capacity) * s.w * s.h;
+        const cand = { stock: s, cols, rows, capacity, colW, rowH, rw, rh, rot, shrink, glass };
+        if (!bestPlan) { bestPlan = cand; return; }
+        const better = stockPick === 'glass'
+          ? (cand.glass < bestPlan.glass - 1e-6 ||
+             (Math.abs(cand.glass - bestPlan.glass) <= 1e-6 && cand.capacity > bestPlan.capacity))
+          : (cand.capacity > bestPlan.capacity);
+        if (better) bestPlan = cand;
+        else if (cand.capacity === bestPlan.capacity && Math.abs(cand.glass - bestPlan.glass) <= 1e-6
+                 && cand.shrink < bestPlan.shrink) bestPlan = cand;
       });
     });
     if (!bestPlan) return;
@@ -1238,7 +1597,269 @@ function tryGridBatching(pieces, stockSizes, tolerance, mode){
   return { gridSheets, remainderPieces };
 }
 
-function optimizeThickness(pieces, stockSizes, tolerance, rules) {
+// shareShortfall: split `total` mm of shortfall as evenly as possible over `count`
+// pieces, none of them giving up more than `cap`. Returns null when the row simply
+// cannot absorb it. Works in 0.1mm steps because that is the smallest size a cutter
+// is going to mark out.
+function shareShortfall(count, cap, total){
+  if (count <= 0) return null;
+  if (total <= OFFCUT_EPS) return new Array(count).fill(0);
+  if (round1(count * cap) < round1(total) - 1e-6) return null;
+  const base = Math.min(cap, Math.floor((total / count) * 10) / 10);
+  const alloc = new Array(count).fill(base);
+  let left = round1(total - base * count);
+  let guard = count * 60;
+  while (left > OFFCUT_EPS && guard-- > 0) {
+    let moved = false;
+    for (let i = 0; i < count && left > OFFCUT_EPS; i++) {
+      const take = Math.min(round1(cap - alloc[i]), left, 0.1);
+      if (take > OFFCUT_EPS) { alloc[i] = round1(alloc[i] + take); left = round1(left - take); moved = true; }
+    }
+    if (!moved) break;
+  }
+  return left > OFFCUT_EPS ? null : alloc;
+}
+
+// buildRow: choose which pieces go in one row across a `SW` wide sheet, given every
+// piece may be cut up to `tol` undersize. Fitting them in the order they come is not
+// good enough — three 492s "fit" 1830 and then nothing else will go in, while two 492s
+// plus two 430s come to 1844 and finish flush after 3.5mm off each. So the row is
+// planned for a target COUNT first (most pieces wins, fullest row breaks the tie), and
+// pieces are only taken while enough room is left for the rest of the row.
+function buildRow(pool, SW, tol){
+  if (!pool.length) return null;
+  const minS = Math.min(...pool.map(u => u.S));
+  if (minS - tol <= 0.01) return null;
+  const nMax = Math.min(pool.length, Math.floor((SW + 1e-6) / (minS - tol)));
+  let best = null;
+  for (let n = nMax; n >= 1; n--) {
+    const room = SW + n * tol;          // what the row may add up to before shrinking
+    const row = [];
+    let sum = 0;
+    for (const u of pool) {
+      if (row.length >= n) break;
+      const stillNeeded = (n - row.length - 1) * minS;
+      if (sum + u.S + stillNeeded <= room + 1e-6) { row.push(u); sum = round1(sum + u.S); }
+    }
+    if (row.length < n || sum > room + 1e-6) continue;
+    if (!best || row.length > best.row.length || (row.length === best.row.length && sum > best.sumS))
+      best = { row, sumS: sum };
+    break;                              // n counts down, so the first hit is the biggest
+  }
+  return best;
+}
+
+// tryBandBatching: how the shop lays out an order where most of the pieces happen to
+// be (near enough) the same LENGTH — stand them all on end, run as many full-width
+// rows down the sheet as the length allows, and shave the few mm needed off every
+// piece in a row so the row finishes flush with the edge.
+//
+// The difference from tryGridBatching is that the pieces do NOT have to be identical:
+// one row can mix 425, 430 and 492 wide panes and the shortfall is shared out over
+// all of them. That is the case the shelf packer keeps getting wrong — it lays the
+// first piece down at its exact size, which fixes the row height at the piece's SHORT
+// side, and from then on the sheet is committed to a bad orientation.
+// e.g. 2x(1224x425) + 2x(1223x430) + 4x(1224x492) on 1830x2440: stood on end that is
+// 2 rows of 1220 (4mm off the length) x 4 panes of ~1830/4 — one sheet, no waste —
+// where the shelf packer needs two sheets and throws away a third of the glass.
+// Only kept if optimizeThickness's cost function says it actually came out ahead.
+// tryBandBatching: the shop's own way of laying an order out — build one full-width
+// ROW at a time, then stack the rows down the sheet.
+//
+// Two things the shelf packer cannot do, and this can:
+//   1. A row is planned as a whole. Pieces are chosen so the row finishes flush with
+//      the edge, and the few mm over are shaved off every piece in it equally — a row
+//      can freely mix 823, 600, 400 and 325 wide panes.
+//   2. Rows of DIFFERENT heights stack on one sheet, and the stack is squeezed the
+//      same way. 823 + 325 + 400 + 600 = 2148 comes down to a 2140 sheet by taking
+//      2mm off each of the four rows.
+// A piece may stand either way up, so the same pane can be a 1529-tall column in one
+// row or a 1529-long lintel in another — whichever fills the sheet better.
+// Only kept if optimizeThickness's cost function says it actually came out ahead.
+function tryBandBatching(pieces, stockSizes, tolerance, maxRowGap){
+  const src = [];
+  pieces.forEach(p => {
+    if (!p.qty || !p.w || !p.h) return;
+    for (let i = 0; i < p.qty; i++) src.push({ code: p.code, ow: p.w, oh: p.h });
+  });
+  if (src.length < 2) return null;
+
+  const pool = src.slice();
+  const sheets = [];
+  let guard = pool.length + 8;
+
+  // One sheet at a time, and for each one every stock size gets a go. Whichever size
+  // comes out with the least glass left over wins that sheet — which is how a big
+  // 3050x2140 for the long panes and a small 1830x2440 for the short ones end up in
+  // the same plan instead of everything being forced onto one size.
+  while (pool.length && guard-- > 0) {
+    let pick = null;
+    stockSizes.forEach(s => {
+      const sheet = buildBandSheet(pool, s, tolerance, maxRowGap || 0);
+      if (!sheet) return;
+      // Judge on the PROPORTION of the sheet that gets used, not the raw mm² thrown
+      // away — otherwise the smallest stock always looks best simply because there is
+      // less of it to waste, and the pieces it cannot take go on to cost another sheet.
+      const eff = sheet.used / (s.w * s.h);
+      if (!pick || eff > pick.eff + 1e-9 ||
+          (Math.abs(eff - pick.eff) <= 1e-9 && sheet.used > pick.sheet.used))
+        pick = { sheet, eff, stock: s };
+    });
+    // Nothing left that fills a sheet properly — the rest goes to the normal packer.
+    if (!pick || pick.eff < 0.66) break;
+    pick.sheet.entries.forEach(u => { const i = pool.indexOf(u); if (i >= 0) pool.splice(i, 1); });
+    sheets.push({ stock: pick.stock, shelves: pick.sheet.shelves });
+  }
+
+  if (!sheets.length) return null;
+
+  const remainder = new Map();
+  pool.forEach(u => {
+    const key = u.code + '|' + u.ow + 'x' + u.oh;
+    if (!remainder.has(key)) remainder.set(key, { code: u.code, w: u.ow, h: u.oh, qty: 0 });
+    remainder.get(key).qty++;
+  });
+  return { bandSheets: sheets, remainderPieces: [...remainder.values()] };
+}
+
+// buildBandSheet: fill ONE sheet of the given stock size with full-width rows taken
+// from `pool`, then squeeze the stack so it finishes flush with the bottom edge.
+// Nothing is removed from `pool` — the caller decides whether to keep this sheet.
+function buildBandSheet(pool, stock, tol, gap){
+  const left = pool.slice();
+  const bands = [];
+  let guard = left.length + 4;
+
+  while (left.length && guard-- > 0) {
+    const usedH = bands.reduce((a, b) => a + b.H, 0);
+    const roomH = bands.reduce((a, b) => a + b.slack, 0);
+
+    // Every side length present is a candidate row height. A piece standing on side v
+    // belongs in a row of height H when either it can be shaved down to H (v - H <= tol)
+    // or it is short enough that the strip left above it is scrap (H - v <= gap).
+    const heights = new Set();
+    left.forEach(u => { heights.add(u.ow); heights.add(u.oh); });
+
+    let pick = null;
+    heights.forEach(H => {
+      if (H <= 0) return;
+      // Will this row still fit once the stack has been squeezed as far as it can go?
+      if (usedH + H - roomH - tol > stock.h + 1e-6) return;
+      const fits = v => v - H <= tol + 1e-6 && H - v <= gap + 1e-6;
+      const elig = [];
+      left.forEach(u => {
+        const opts = [];
+        if (fits(u.oh)) opts.push({ u, S: u.ow, V: u.oh, rot: false });
+        if (fits(u.ow)) opts.push({ u, S: u.oh, V: u.ow, rot: true });
+        if (!opts.length) return;
+        opts.sort((a, b) => b.V - a.V || b.S - a.S);   // least glass wasted above it
+        elig.push(opts[0]);
+      });
+      if (!elig.length) return;
+      elig.sort((a, b) => b.S - a.S);
+      const row = buildRow(elig, stock.w, tol);
+      if (!row) return;
+      // Judge the row on the GLASS it actually uses, not just how wide it reaches —
+      // a row packed edge to edge is still a bad row if half its height is scrap.
+      const wScale = Math.min(1, stock.w / row.sumS);
+      const used = row.row.reduce((a, e) => a + e.S * wScale * Math.min(e.V, H), 0);
+      const fill = used / (stock.w * H);
+      if (!pick || fill > pick.fill + 1e-9 || (Math.abs(fill - pick.fill) <= 1e-9 && H > pick.H))
+        pick = { H, row, fill };
+    });
+
+    // A row that cannot even be filled two-thirds of the way is not worth the sheet.
+    if (!pick || pick.fill < 0.66) break;
+
+    const alloc = shareShortfall(pick.row.row.length, tol, round1(Math.max(0, pick.row.sumS - stock.w)));
+    if (!alloc) break;
+    // How much shorter this row could still be cut, if the stack needs the room.
+    // A piece already standing clear of the top of the row gives that headroom for free.
+    let slack = tol;
+    pick.row.row.forEach(e => { slack = Math.min(slack, round1(tol + (pick.H - e.V))); });
+    bands.push({ H: pick.H, entries: pick.row.row, alloc, slack: Math.max(0, slack) });
+    pick.row.row.forEach(e => { const i = left.indexOf(e.u); if (i >= 0) left.splice(i, 1); });
+  }
+
+  if (!bands.length) return null;
+
+  // Shave the stack down to the sheet, sharing the shortfall over its rows.
+  const total = round1(bands.reduce((a, x) => a + x.H, 0));
+  let give = new Array(bands.length).fill(0);
+  if (total > stock.h + 1e-6) {
+    const caps = bands.map(x => x.slack);
+    const need = round1(total - stock.h);
+    if (round1(caps.reduce((a, x) => a + x, 0)) < need - 1e-6) return null;
+    const spread = distributeCapped(caps, need);
+    if (!spread) return null;
+    give = spread;
+  }
+
+  const shelves = [];
+  const entries = [];
+  let y = 0, used = 0;
+  bands.forEach((b, bi) => {
+    const H = round1(b.H - give[bi]);
+    let x = 0;
+    const items = b.entries.map((e, k) => {
+      const w = round1(e.S - b.alloc[k]);
+      // A piece shorter than its row keeps its own size; the strip above it is scrap.
+      const h = Math.min(e.V, H);
+      used += w * h;
+      entries.push(e.u);
+      const it = { x: round1(x), w, h, code: e.u.code, rot: e.rot,
+        reqW: e.S, reqH: e.V,
+        shrinkW: round1(e.S - w), shrinkH: round1(e.V - h),
+        shrink: round1((e.S - w) + (e.V - h)) };
+      x = round1(x + w);
+      return it;
+    });
+    shelves.push({ y: round1(y), height: H, usedWidth: round1(x), items });
+    y = round1(y + H);
+  });
+
+  return { shelves, entries, used };
+}
+
+// distributeCapped: hand out `need` mm as evenly as the caps allow.
+function distributeCapped(caps, need){
+  const n = caps.length;
+  const alloc = new Array(n).fill(0);
+  let left = round1(need);
+  let guard = n * 80;
+  while (left > OFFCUT_EPS && guard-- > 0) {
+    let moved = false;
+    for (let i = 0; i < n && left > OFFCUT_EPS; i++) {
+      const take = Math.min(round1(caps[i] - alloc[i]), left, 0.1);
+      if (take > OFFCUT_EPS) { alloc[i] = round1(alloc[i] + take); left = round1(left - take); moved = true; }
+    }
+    if (!moved) break;
+  }
+  return left > OFFCUT_EPS ? null : alloc;
+}
+
+// A stock sheet is a rectangle, so a "3050x2140" and a "2140x3050" are the SAME
+// piece of glass turned round — but the packer always runs its rows along stock.w
+// and stacks them down stock.h, so which way round it is completely changes the
+// layout it can reach. Turning the sheet is free in the yard, so both ways round
+// are offered and the cost function keeps whichever cuts better.
+// (e.g. 4 panes 1529 long: standing on a 3050-wide sheet only one band of 1529
+// fits in the 2140 height, while turned portrait two bands of 1525 fill 3050 dead on.)
+function expandStockOrientations(stockSizes){
+  const out = [], seen = new Set();
+  (stockSizes || []).forEach(s => {
+    [[s.w, s.h], [s.h, s.w]].forEach(([w, h]) => {
+      const k = round1(w) + 'x' + round1(h);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push({ ...s, w, h });
+    });
+  });
+  return out;
+}
+
+function optimizeThickness(pieces, stockSizesIn, tolerance, rules) {
+  const stockSizes = expandStockOrientations(stockSizesIn);
   const W_UNPLACED = 1e12, W_SHEET = 1e9, W_DEAD = 1e6, W_SHRINK = 1e3, W_DEADAREA = 1e-4;
   const VARIANTS = [
     { sortKey: 'h',    deadWeight: 1 },
@@ -1257,9 +1878,25 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
     { sortKey: 'w',    deadWeight: 1, shrinkCost: 'cheap' },
     { sortKey: 'h',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap' },
     { sortKey: 'w',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap' },
+    // "Chia hụt trước": plan the whole row/stack up front and share the shortfall
+    // out evenly, the way the shop does it by hand.
+    { sortKey: 'h',    deadWeight: 1, shrinkCost: 'cheap', shrinkFirst: 1 },
+    { sortKey: 'area', deadWeight: 1, shrinkCost: 'cheap', shrinkFirst: 1 },
+    { sortKey: 'w',    deadWeight: 1, shrinkCost: 'cheap', shrinkFirst: 1 },
+    { sortKey: 'h',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap', shrinkFirst: 1 },
+    { sortKey: 'w',    deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap', shrinkFirst: 1 },
+    { sortKey: 'area', deadWeight: 1, fitKey: 'w', shrinkCost: 'cheap', shrinkFirst: 1 },
   ];
+  // Sheets are compared by the RAW GLASS they consume, not by how many of them
+  // there are: with several stock sizes on the books, 7 small sheets can easily be
+  // cheaper than 5 oversized ones. Measured in "smallest-stock equivalents", so
+  // with a single stock size this is exactly the old sheet count and nothing moves.
+  const minStockArea = stockSizes.length
+    ? Math.min(...stockSizes.map(s => s.w * s.h))
+    : 1;
+  const stockUsed = r => r.sheets.reduce((a, s) => a + (s.stock.w * s.stock.h) / minStockArea, 0);
   const cost = r => r.unplaced.length * W_UNPLACED
-    + r.sheets.length * W_SHEET
+    + stockUsed(r) * W_SHEET
     + r.deadCount * W_DEAD
     + r.totalShrink * W_SHRINK
     + r.deadArea * W_DEADAREA;
@@ -1305,8 +1942,34 @@ function optimizeThickness(pieces, stockSizes, tolerance, rules) {
   // large batch by hand — deliberately shrinking every piece a little so the whole batch
   // tiles one sheet cleanly, instead of the shelf-packer only shrinking a piece when it's
   // the sole way to squeeze it into whatever gap happens to be open.
-  ['full', 'ceil'].forEach(mode => {
-    const gb = tryGridBatching(pieces, stockSizes, tolerance, mode);
+  // Band layout: stand same-length pieces on end and fill whole rows.
+  {
+    // Allowing rows to mix heights opens up layouts that would otherwise be impossible,
+    // but it also lets the row builder commit to a row that wastes height. No way to
+    // know up front which wins, so lay the order out both ways and compare the results.
+    const gaps = [0];
+    if (rules.maxRowGap > 0) gaps.push(rules.maxRowGap);
+    // Mixing stock sizes usually wins, but not always — sticking to one size can line
+    // the rows up better. Both are laid out and compared.
+    const stockSets = [stockSizes];
+    if (stockSizes.length > 1) stockSizes.forEach(s => stockSets.push([s]));
+    const combos = [];
+    gaps.forEach(gap => stockSets.forEach(set => combos.push([gap, set])));
+    combos.forEach(([gap, set]) => {
+      const bb = tryBandBatching(pieces, set, tolerance, gap);
+      if (!bb) return;
+      const remBest = bb.remainderPieces.length ? packAllVariants(bb.remainderPieces) : { sheets: [], unplaced: [] };
+      const mergedSheets = [...bb.bandSheets, ...remBest.sheets];
+      const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
+      const c = cost(merged);
+      if (c < cost(best)) { merged.cost = c; best = merged; }
+    });
+  }
+
+  const GRID_PLANS = [];
+  ['full', 'ceil'].forEach(mode => ['capacity', 'glass'].forEach(stockPick => GRID_PLANS.push([mode, stockPick])));
+  GRID_PLANS.forEach(([mode, stockPick]) => {
+    const gb = tryGridBatching(pieces, stockSizes, tolerance, mode, stockPick);
     if (!gb) return;
     const remBest = gb.remainderPieces.length
       ? packAllVariants(gb.remainderPieces)
@@ -1354,6 +2017,16 @@ function sheetSVG(sheet){
   parts.push(`<text x="${cx}" y="${H/2}" font-size="${fsDim}" text-anchor="middle" fill="#0f172a" font-family="sans-serif" font-weight="600" transform="rotate(-90 ${cx} ${H/2})">${fmt(H)}mm</text>`);
 
   const fs = S * 0.028;
+  const CHAR_W = 0.56, LINE_H = 1.15, LINE_GAP = 0.28;
+  // bestScale: largest font (relative to fsBase, capped at 1) that fits `lines` of
+  // text stacked across `cross` mm, with no line running past `reading` mm long —
+  // the same fit test whichever way the label ends up rotated.
+  function bestScale(reading, cross, lines){
+    const maxChars = Math.max(1, ...lines.map(s => s.length));
+    const kW = (reading * 0.92) / (CHAR_W * maxChars * fs);
+    const kH = (cross * 0.85) / ((lines.length * LINE_H + (lines.length - 1) * LINE_GAP) * fs);
+    return Math.max(0, Math.min(1, kW, kH));
+  }
   sheet.shelves.forEach(sh=>{
     sh.items.forEach(it=>{
       const shrunk = it.shrink>0;
@@ -1362,21 +2035,37 @@ function sheetSVG(sheet){
       const strokeW = Math.max(W,H)*0.003 * (shrunk?2:1);
       parts.push(`<rect x="${it.x}" y="${sh.y}" width="${it.w}" height="${it.h}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeW}"/>`);
       const cxI = it.x + it.w/2, cyI = sh.y + it.h/2;
-      const k = Math.max(0.45, Math.min(1, Math.min(it.w/(fs*5.2), it.h/(fs*3.6))));
-      const f = fs * k;
+
+      // Show the ORDERED size, not the actual cut size, with the shortfall noted next
+      // to whichever side lost it — e.g. "600 (-2) x 1529 (-4)" — never the bare
+      // post-shrink numbers, so the label always matches what is written on the order.
       const label1 = it.code || '';
-      const label2 = `${fmt(it.w)}x${fmt(it.h)}`;
-      if(k < 0.45){
-        parts.push(`<text x="${cxI}" y="${cyI + f*0.3}" font-size="${f}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif">${label2}</text>`);
-      } else {
-        parts.push(`<text x="${cxI}" y="${cyI - f*0.75}" font-size="${f}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif" font-weight="600">${label1}</text>`);
-        parts.push(`<text x="${cxI}" y="${cyI + f*0.30}" font-size="${f*0.85}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif">${label2}</text>`);
-        if(shrunk && k >= 0.55){
-          const dparts = [];
-          if(it.shrinkW > 0.05) dparts.push(`dài -${fmt(it.shrinkW)}`);
-          if(it.shrinkH > 0.05) dparts.push(`rộng -${fmt(it.shrinkH)}`);
-          if(dparts.length) parts.push(`<text x="${cxI}" y="${cyI + f*1.35}" font-size="${f*0.8}" fill="#92400e" font-weight="600" text-anchor="middle" font-family="sans-serif">hụt ${dparts.join(', ')}</text>`);
-        }
+      const wTxt = fmt(it.reqW) + (it.shrinkW > 0.05 ? ` (-${fmt(it.shrinkW)})` : '');
+      const hTxt = fmt(it.reqH) + (it.shrinkH > 0.05 ? ` (-${fmt(it.shrinkH)})` : '');
+      const label2 = `${wTxt} x ${hTxt}`;
+
+      // Run the label along whichever side of the piece is longer, so it never has to
+      // squeeze sideways across the narrow dimension — a 600x1529 pane gets its text
+      // written running along the 1529 side, same as the piece would be marked by hand.
+      const vertical = it.h > it.w * 1.15;
+      const reading = vertical ? it.h : it.w, cross = vertical ? it.w : it.h;
+
+      let lines = [label1, label2];
+      let k = bestScale(reading, cross, lines);
+      if (k < 0.34) { lines = [label2]; k = bestScale(reading, cross, lines); }
+      if (k >= 0.2) {
+        const f = fs * Math.max(k, 0.2);
+        const step = (LINE_H + LINE_GAP) * f;
+        const start = -((lines.length - 1) * step) / 2;
+        lines.forEach((txt, i) => {
+          const off = start + i * step;
+          const weight = (lines.length > 1 && i === 0) ? ' font-weight="600"' : '';
+          const size = (lines.length > 1 && i === 1) ? f * 0.88 : f;
+          const x = vertical ? cxI + off : cxI;
+          const y = vertical ? cyI : cyI + off + f * 0.3;
+          const rot = vertical ? ` transform="rotate(-90 ${x} ${y})"` : '';
+          parts.push(`<text x="${x}" y="${y}" font-size="${size}" fill="#0c4a6e" text-anchor="middle" font-family="sans-serif"${weight}${rot}>${txt}</text>`);
+        });
       }
       if(shrunk){
         const t = Math.min(fs*0.9, it.w*0.25, it.h*0.25);
@@ -1429,7 +2118,7 @@ function runOptimize(){
   if(invalidRows.length){ showMsg('warn', `${invalidRows.length} dòng thiếu Dài/Rộng/SL — kiểm tra lại bảng.`); }
 
   const tolerance = state.tolerance || 0;
-  const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0, allowExtraSheet: !!state.allowExtraSheet };
+  const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0, maxRowGap: state.maxRowGap || 0, allowExtraSheet: !!state.allowExtraSheet };
 
   // group by thickness
   const groups = {};
