@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
-<head>
+<html lang="vi"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -66,19 +65,65 @@
 </head>
 <body>
 
+<!-- ===== KHÓA TRUY CẬP: mỗi thợ 1 mã riêng, thiết bị tự nhớ sau lần nhập đúng đầu tiên.
+     Thêm/xóa thợ: sửa danh sách ACCESS_CODES ở khối script phía dưới, rồi đưa file lên
+     GitHub như mọi lần cập nhật khác. Thợ bị xóa mã sẽ tự bị khóa lại ở lần mở tiếp
+     theo, không ảnh hưởng tới thợ khác. ===== -->
+<div id="lockScreen" style="position: fixed; inset: 0px; z-index: 9999; background: rgb(15, 23, 42); align-items: center; justify-content: center; padding: 20px;">
+  <div style="background:#1e293b;border-radius:14px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.4);">
+    <div style="font-size:34px;margin-bottom:10px;">🔒</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e2e8f0;">Nhập mã để dùng phần mềm</div>
+    <input id="lockCodeInput" type="tel" inputmode="numeric" autocomplete="off" placeholder="Mã của bạn" style="background:#273449;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:13px;font-size:20px;width:100%;text-align:center;letter-spacing:3px;margin-bottom:12px;">
+    <button id="lockSubmitBtn" style="width:100%;padding:13px;font-size:15px;font-weight:600;background:#38bdf8;color:#04121c;border:none;border-radius:10px;cursor:pointer;">Vào</button>
+    <div id="lockError" style="color:#fca5a5;font-size:13px;margin-top:12px;min-height:16px;"></div>
+  </div>
+</div>
+
+<div id="appRoot" class="hidden">
+
 <header>
   <h1>🪟 Cắt Kính Tối Ưu</h1>
   <!-- Bump this whenever the algorithm changes: it is the only way to tell at a glance
        whether the browser is showing a fresh copy or a cached one. -->
-  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 13/08/2026-h · sửa lỗi mất cột SL</div>
+  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 13/08/2026-n · sửa lỗi tải file khi mở trực tiếp trên máy</div>
 </header>
 
 <main>
 
   <div id="globalMsg"></div>
 
-  <!-- API KEY -->
-  <div class="card">
+  <!-- ACCESS CODE MANAGEMENT (chỉ admin thấy) -->
+  <div class="card hidden" id="accessAdminCard">
+    <h2>🔑 Quản lý mã thợ</h2>
+    <p class="muted">Sửa tên/mã, thêm hoặc xóa thợ ngay tại đây — không cần đụng vào code. Xong bấm "Tải file cập nhật" rồi upload file <b>index.html</b> vừa tải lên GitHub như mọi lần cập nhật khác. Thợ bị xóa sẽ tự bị khóa ở lần mở app tiếp theo.</p>
+    <table id="accessTable">
+      <thead><tr><th>Tên thợ</th><th style="width:100px">Mã</th><th style="width:60px">Admin</th><th class="col-del"></th></tr></thead>
+      <tbody><tr>
+      <td><input type="text" data-i="0" data-f="name" value="Trung"></td>
+      <td><input type="text" data-i="0" data-f="code" value="1357" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="0" data-f="admin"></td>
+      <td class="col-del"><button class="del-btn" data-i="0">✕</button></td>
+    </tr><tr>
+      <td><input type="text" data-i="1" data-f="name" value="Bình"></td>
+      <td><input type="text" data-i="1" data-f="code" value="2468" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="1" data-f="admin"></td>
+      <td class="col-del"><button class="del-btn" data-i="1">✕</button></td>
+    </tr><tr>
+      <td><input type="text" data-i="2" data-f="name" value="Tùng"></td>
+      <td><input type="text" data-i="2" data-f="code" value="9090" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="2" data-f="admin" checked=""></td>
+      <td class="col-del"><button class="del-btn" data-i="2">✕</button></td>
+    </tr></tbody>
+    </table>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn secondary small" id="addAccessRow">+ Thêm thợ</button>
+      <button class="btn small" id="downloadAccessFile">⬇️ Tải file cập nhật</button>
+    </div>
+    <div id="accessMsg" class="muted" style="margin-top: 8px; color: rgb(134, 239, 172);">Đang tạo file...</div>
+  </div>
+
+  <!-- API KEY (chỉ admin thấy) -->
+  <div class="card hidden" id="apiKeyCard">
     <h2>1. Gemini API key</h2>
     <p class="muted">Dùng để đọc số đo từ ảnh chụp giấy viết tay. Lấy miễn phí tại
       <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a>,
@@ -89,10 +134,10 @@
     </div>
   </div>
 
-  <!-- LEARNING DATA -->
-  <div class="card">
+  <!-- LEARNING DATA (chỉ admin thấy) -->
+  <div class="card hidden" id="learningCard">
     <h2>2. Dữ liệu học của AI (đọc chữ càng ngày càng chính xác)</h2>
-    <div id="learningStatsBox" class="muted learn-box"></div>
+    <div id="learningStatsBox" class="muted learn-box">Cấp độ học: <b>L0 — Chưa có dữ liệu học</b><br>Đã xử lý 9 ảnh, 77 dòng, sửa 0 lần — độ chính xác ước tính 100%</div>
     <div class="row" style="margin-top:8px;">
       <button class="btn secondary small" id="btnExportLearning">⬇️ Sao lưu</button>
       <button class="btn secondary small" id="btnImportLearning">⬆️ Nhập dữ liệu học (.json)</button>
@@ -102,10 +147,46 @@
 
   <!-- STOCK TABLE -->
   <div class="card">
-    <h2>3. Khổ kính nguyên liệu & quy định kính thừa</h2>
+    <h2>3. Khổ kính nguyên liệu &amp; quy định kính thừa</h2>
     <table id="stockTable">
       <thead><tr><th style="width:20%">Dày (mm)</th><th>Khổ có sẵn (mm) — cách nhau bởi dấu phẩy</th><th class="col-del"></th></tr></thead>
-      <tbody></tbody>
+      <tbody><tr>
+      <td><input type="number" data-idx="0" class="stock-thickness" value="3"></td>
+      <td><textarea class="sizes" data-idx="0">1520x2140</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="0">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="1" class="stock-thickness" value="4"></td>
+      <td><textarea class="sizes" data-idx="1">1520x2140, 1680x2140</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="1">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="2" class="stock-thickness" value="5"></td>
+      <td><textarea class="sizes" data-idx="2">2140x3050, 1830x2440, 1680x2135</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="2">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="3" class="stock-thickness" value="6"></td>
+      <td><textarea class="sizes" data-idx="3">1830x2440, 2140x3050</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="3">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="4" class="stock-thickness" value="8"></td>
+      <td><textarea class="sizes" data-idx="4">2130x3050</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="4">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="5" class="stock-thickness" value="10"></td>
+      <td><textarea class="sizes" data-idx="5">2130x3660, 2400x3660</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="5">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="6" class="stock-thickness" value="12"></td>
+      <td><textarea class="sizes" data-idx="6">2130x3660, 2440x3660</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="6">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="7" class="stock-thickness" value="15"></td>
+      <td><textarea class="sizes" data-idx="7">2130x3660</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="7">✕</button></td>
+    </tr><tr>
+      <td><input type="number" data-idx="8" class="stock-thickness" value="19"></td>
+      <td><textarea class="sizes" data-idx="8">2130x3660</textarea></td>
+      <td class="col-del"><button class="del-btn" data-idx="8">✕</button></td>
+    </tr></tbody>
     </table>
     <button class="btn secondary small" id="addStockRow" style="margin-top:8px;">+ Thêm độ dày</button>
 
@@ -122,7 +203,7 @@
       <label class="muted" style="flex:1;">Trong CÙNG một hàng, cho phép các mã lệch chiều cao tối đa (mm) — phần thừa phía trên tấm ngắn hơn coi như bỏ đi</label>
       <input type="number" id="maxRowGapInput" style="width:80px;">
     </div>
-    <div id="offcutRuleHint" class="muted"></div>
+    <div id="offcutRuleHint" class="muted">Phần thừa có chiều nhỏ nhất trong khoảng 60–250mm là "khó dùng" — phần mềm sẽ cố tránh tạo ra loại này.</div>
     <div class="row" style="margin-top:10px;align-items:flex-start;">
       <input type="checkbox" id="allowExtraSheetInput" style="margin-top:2px;">
       <label class="muted" for="allowExtraSheetInput" style="flex:1;">Cho phép dùng thêm tối đa 1 tấm/độ dày nếu nhờ đó tránh được HOÀN TOÀN phần thừa khó dùng</label>
@@ -178,6 +259,170 @@
   <div id="resultsWrap"></div>
 
 </main>
+
+</div><!-- /#appRoot -->
+
+<script>
+/* ================= KHÓA TRUY CẬP ================= */
+// Danh sách mã hợp lệ. Không cần sửa tay nữa — dùng màn "🔑 Quản lý mã thợ" ngay trong
+// app (chỉ người có mã admin:true mới thấy) để thêm/xóa thợ và tải file cập nhật.
+// Giữ marker ACCESS_CODES_START/END nguyên vẹn — màn quản lý mã dựa vào đúng 2 dòng
+// này để tìm và thay khối bên dưới khi tạo file mới.
+/* ACCESS_CODES_START */
+const ACCESS_CODES = {
+  '2000': { name: 'Trung', admin: false },
+  '1987': { name: 'Bình', admin: false },
+  '1996': { name: 'Tùng', admin: true },
+};
+/* ACCESS_CODES_END */
+let CK_CURRENT_CODE = null;
+let ckAccessRows = []; // [{code,name,admin}] — khai báo trước vì có thể bị initAccessAdmin() gọi ngay khi unlock() chạy
+(function(){
+  const LS_KEY = 'ck_access_code';
+  const lockEl = document.getElementById('lockScreen');
+  const appEl = document.getElementById('appRoot');
+  const input = document.getElementById('lockCodeInput');
+  const btn = document.getElementById('lockSubmitBtn');
+  const errEl = document.getElementById('lockError');
+  function unlock(code){
+    CK_CURRENT_CODE = code;
+    lockEl.style.display = 'none';
+    appEl.classList.remove('hidden');
+    if (typeof initAccessAdmin === 'function') initAccessAdmin();
+  }
+  function tryCode(code){
+    if (Object.prototype.hasOwnProperty.call(ACCESS_CODES, code)) {
+      localStorage.setItem(LS_KEY, code);
+      unlock(code);
+      return true;
+    }
+    return false;
+  }
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved && tryCode(saved)) {
+    // mã đã lưu vẫn còn hợp lệ — vào thẳng, không hỏi lại
+  } else {
+    if (saved) localStorage.removeItem(LS_KEY); // mã cũ đã bị xóa khỏi danh sách (thợ nghỉ)
+    btn.addEventListener('click', () => {
+      const code = input.value.trim();
+      if (!tryCode(code)) {
+        errEl.textContent = 'Mã không đúng, thử lại.';
+        input.value = '';
+        input.focus();
+      }
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+    setTimeout(() => input.focus(), 150);
+  }
+})();
+
+/* ================= QUẢN LÝ MÃ THỢ (chỉ admin thấy) ================= */
+// Sửa danh sách ngay trong app rồi bấm "Tải file cập nhật" để lấy file index.html mới
+// — không cần đụng vào code. Vẫn phải upload file đó lên GitHub như mọi lần khác vì
+// app này không có server riêng để tự lưu cho mọi thiết bị cùng thấy.
+function initAccessAdmin(){
+  // Mấy mục này chỉ chủ xưởng (mã admin:true) mới cần thấy — thợ cắt kính chỉ cần
+  // dùng phần chia kính, không cần đụng API key / dữ liệu học AI / quản lý mã.
+  const me = ACCESS_CODES[CK_CURRENT_CODE];
+  const isAdmin = !!(me && me.admin);
+  ['accessAdminCard', 'apiKeyCard', 'learningCard'].forEach(id => {
+    document.getElementById(id).classList.toggle('hidden', !isAdmin);
+  });
+  if (!isAdmin) return;
+  ckAccessRows = Object.entries(ACCESS_CODES).map(([code, v]) => ({ code, name: v.name, admin: !!v.admin }));
+  renderAccessTable();
+}
+function renderAccessTable(){
+  const tbody = document.querySelector('#accessTable tbody');
+  tbody.innerHTML = '';
+  ckAccessRows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-i="${i}" data-f="name" value="${row.name.replace(/"/g,'&quot;')}"></td>
+      <td><input type="text" data-i="${i}" data-f="code" value="${row.code}" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="admin" ${row.admin ? 'checked' : ''}></td>
+      <td class="col-del"><button class="del-btn" data-i="${i}">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const i = Number(inp.dataset.i), f = inp.dataset.f;
+      ckAccessRows[i][f] = f === 'admin' ? inp.checked : inp.value.trim();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = Number(b.dataset.i);
+      if (ckAccessRows.length <= 1) { showAccessMsg('Phải còn ít nhất 1 mã.', true); return; }
+      ckAccessRows.splice(i, 1);
+      renderAccessTable();
+    });
+  });
+}
+function showAccessMsg(text, isErr){
+  const el = document.getElementById('accessMsg');
+  el.textContent = text;
+  el.style.color = isErr ? '#fca5a5' : '#86efac';
+}
+document.getElementById('addAccessRow')?.addEventListener('click', () => {
+  ckAccessRows.push({ code: '', name: '', admin: false });
+  renderAccessTable();
+});
+document.getElementById('downloadAccessFile')?.addEventListener('click', async () => {
+  const codes = ckAccessRows.map(r => r.code.trim());
+  const names = ckAccessRows.map(r => r.name.trim());
+  if (names.some(n => !n)) return showAccessMsg('Chưa nhập tên cho tất cả các dòng.', true);
+  if (codes.some(c => !/^[0-9]{3,8}$/.test(c))) return showAccessMsg('Mã phải là số, 3-8 chữ số, không được để trống.', true);
+  if (new Set(codes).size !== codes.length) return showAccessMsg('Có 2 thợ đang trùng mã, sửa lại.', true);
+  if (!ckAccessRows.some(r => r.admin)) return showAccessMsg('Phải còn ít nhất 1 mã admin (để còn vào được màn này lần sau).', true);
+  try {
+    showAccessMsg('Đang tạo file...', false);
+    // fetch() không dùng được khi mở file trực tiếp trên máy (file:///...) — chỉ chạy
+    // được qua địa chỉ web thật (https://...). Nếu fetch lỗi (đang mở file cục bộ),
+    // lấy lại HTML từ chính trang đang chạy làm phương án dự phòng.
+    let rawHtml;
+    try {
+      const res = await fetch(location.href, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      rawHtml = await res.text();
+    } catch (fetchErr) {
+      // Phương án dự phòng: chụp lại HTML từ chính trang đang chạy. Trang hiện tại đã
+      // MỞ KHÓA (đang xem được app) nên phải tạm trả DOM về đúng trạng thái "đang khóa"
+      // trước khi chụp — nếu không, file tải về sẽ hiện thẳng app cho BẤT KỲ ai mở,
+      // không hỏi mã gì cả. Chụp xong trả lại đúng như cũ để không ảnh hưởng phiên
+      // đang dùng của anh.
+      const lockEl2 = document.getElementById('lockScreen');
+      const appEl2 = document.getElementById('appRoot');
+      const prevLockDisplay = lockEl2.style.display;
+      const prevAppHidden = appEl2.classList.contains('hidden');
+      const cardIds = ['accessAdminCard', 'apiKeyCard', 'learningCard'];
+      const prevCardHidden = cardIds.map(id => document.getElementById(id).classList.contains('hidden'));
+      lockEl2.style.display = '';
+      appEl2.classList.add('hidden');
+      cardIds.forEach(id => document.getElementById(id).classList.add('hidden'));
+      rawHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      lockEl2.style.display = prevLockDisplay;
+      appEl2.classList.toggle('hidden', prevAppHidden);
+      cardIds.forEach((id, i) => document.getElementById(id).classList.toggle('hidden', prevCardHidden[i]));
+    }
+    const lines = ckAccessRows.map(r => `  '${r.code}': { name: '${r.name.replace(/'/g, "\\'")}', admin: ${r.admin} },`).join('\n');
+    const newBlock = `/* ACCESS_CODES_START */\nconst ACCESS_CODES = {\n${lines}\n};\n/* ACCESS_CODES_END */`;
+    const marker = /\/\* ACCESS_CODES_START \*\/[\s\S]*?\/\* ACCESS_CODES_END \*\//;
+    if (!marker.test(rawHtml)) return showAccessMsg('Không tìm thấy khối mã trong file gốc — báo Claude giúp anh nhé.', true);
+    const newHtml = rawHtml.replace(marker, newBlock);
+    const blob = new Blob([newHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'index.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showAccessMsg('Đã tải file index.html mới — upload file này lên GitHub như mọi lần là xong.', false);
+  } catch (e) {
+    showAccessMsg('Lỗi tạo file: ' + e.message, true);
+  }
+});
+</script>
 
 <script>
 /* ================= STORAGE ================= */
@@ -1527,11 +1772,21 @@ function tryGridBatching(pieces, stockSizes, tolerance, mode, stockPick){
         //                An 1830x2440 holding 8 and a 3050x2140 holding 8 are not the
         //                same deal: the small one wastes 2m² less.
         const glass = Math.ceil(g.totalQty / capacity) * s.w * s.h;
-        const cand = { stock: s, cols, rows, capacity, colW, rowH, rw, rh, rot, shrink, glass };
+        // 'snug' — how much of the sheet WIDTH a row actually uses (cols*colW).
+        //          'capacity' can pick a layout that only spans a piece's own width
+        //          down every row instead of the full sheet width, leaving the same
+        //          unused strip on every row instead of one clean offcut. This picks
+        //          the orientation that fills the width — what anh Tùng does by hand:
+        //          line pieces up edge-to-edge across the sheet first.
+        const rowWaste = round1(s.w - cols * colW);
+        const cand = { stock: s, cols, rows, capacity, colW, rowH, rw, rh, rot, shrink, glass, rowWaste };
         if (!bestPlan) { bestPlan = cand; return; }
         const better = stockPick === 'glass'
           ? (cand.glass < bestPlan.glass - 1e-6 ||
              (Math.abs(cand.glass - bestPlan.glass) <= 1e-6 && cand.capacity > bestPlan.capacity))
+          : stockPick === 'snug'
+          ? (cand.rowWaste < bestPlan.rowWaste - 1e-6 ||
+             (Math.abs(cand.rowWaste - bestPlan.rowWaste) <= 1e-6 && cand.capacity > bestPlan.capacity))
           : (cand.capacity > bestPlan.capacity);
         if (better) bestPlan = cand;
         else if (cand.capacity === bestPlan.capacity && Math.abs(cand.glass - bestPlan.glass) <= 1e-6
@@ -1861,7 +2116,13 @@ function expandStockOrientations(stockSizes){
 
 function optimizeThickness(pieces, stockSizesIn, tolerance, rules) {
   const stockSizes = expandStockOrientations(stockSizesIn);
-  const W_UNPLACED = 1e12, W_SHEET = 1e9, W_DEAD = 1e6, W_SHRINK = 1e3, W_DEADAREA = 1e-4;
+  // Ưu tiên (chốt 13/08/2026, xem thêm ghi chú cắt kính): TRÁNH "khó dùng" (không bán
+  // được) còn quan trọng hơn cả ít m² — một miếng khó dùng nhỏ là mất trắng, còn thừa
+  // ra một miếng to (do dùng khổ lớn hơn) thì vẫn bán/dùng lại được. Nên W_DEADCOUNT
+  // rất nặng, đủ để thắng cả việc đổi sang khổ nguyên liệu to hơn cho 1 tấm nếu nhờ đó
+  // hết khó dùng hoàn toàn. W_KEEP (gom "giữ lại" thành ít miếng to) đứng sau đó.
+  // W_DEADAREA chỉ còn là tie-break rất nhẹ giữa các phương án cùng số miếng dead.
+  const W_UNPLACED = 1e12, W_SHEET = 1e9, W_DEADCOUNT = 3e8, W_KEEP = 25000, W_SHRINK = 1e3, W_DEADAREA = 0.1;
   const VARIANTS = [
     { sortKey: 'h',    deadWeight: 1 },
     { sortKey: 'area', deadWeight: 1 },
@@ -1898,9 +2159,10 @@ function optimizeThickness(pieces, stockSizesIn, tolerance, rules) {
   const stockUsed = r => r.sheets.reduce((a, s) => a + (s.stock.w * s.stock.h) / minStockArea, 0);
   const cost = r => r.unplaced.length * W_UNPLACED
     + stockUsed(r) * W_SHEET
-    + r.deadCount * W_DEAD
+    + r.deadArea * W_DEADAREA
+    + r.keepCount * W_KEEP
     + r.totalShrink * W_SHRINK
-    + r.deadArea * W_DEADAREA;
+    + r.deadCount * W_DEADCOUNT;
 
   function packAllVariants(piecesArg){
     // Stage 1: free repair only (never opens an extra sheet). Cannot regress sheet count
@@ -1935,51 +2197,111 @@ function optimizeThickness(pieces, stockSizesIn, tolerance, rules) {
     return best;
   }
 
-  let best = packAllVariants(pieces);
+  // packBatched: the full search for one pool of pieces — plain shelf packing
+  // (packAllVariants) plus band batching and grid batching on top of it, each kept
+  // only if it beats what came before. Used for the whole order, and reused inside
+  // the isolate stage below so a group's "leftover" pieces get the same full
+  // treatment instead of falling back to plain shelf packing alone.
+  function packBatched(piecesArg) {
+    let localBest = packAllVariants(piecesArg);
 
-  // Stage 0 (tried last, kept only if it wins): batch big groups of identical-size pieces
-  // into fully tiled grid sheets (see tryGridBatching) before handing whatever's left to
-  // the normal search above. This is what closes the gap with how anh Tùng actually cuts a
-  // large batch by hand — deliberately shrinking every piece a little so the whole batch
-  // tiles one sheet cleanly, instead of the shelf-packer only shrinking a piece when it's
-  // the sole way to squeeze it into whatever gap happens to be open.
-  // Band layout: stand same-length pieces on end and fill whole rows.
-  {
-    // Allowing rows to mix heights opens up layouts that would otherwise be impossible,
-    // but it also lets the row builder commit to a row that wastes height. No way to
-    // know up front which wins, so lay the order out both ways and compare the results.
-    const gaps = [0];
-    if (rules.maxRowGap > 0) gaps.push(rules.maxRowGap);
-    // Mixing stock sizes usually wins, but not always — sticking to one size can line
-    // the rows up better. Both are laid out and compared.
-    const stockSets = [stockSizes];
-    if (stockSizes.length > 1) stockSizes.forEach(s => stockSets.push([s]));
-    const combos = [];
-    gaps.forEach(gap => stockSets.forEach(set => combos.push([gap, set])));
-    combos.forEach(([gap, set]) => {
-      const bb = tryBandBatching(pieces, set, tolerance, gap);
-      if (!bb) return;
-      const remBest = bb.remainderPieces.length ? packAllVariants(bb.remainderPieces) : { sheets: [], unplaced: [] };
-      const mergedSheets = [...bb.bandSheets, ...remBest.sheets];
+    // Band layout: stand same-length pieces on end and fill whole rows. Allowing rows
+    // to mix heights opens up layouts that would otherwise be impossible, but it also
+    // lets the row builder commit to a row that wastes height — no way to know up
+    // front which wins, so lay the order out both ways and compare the results.
+    {
+      const gaps = [0];
+      if (rules.maxRowGap > 0) gaps.push(rules.maxRowGap);
+      // Mixing stock sizes usually wins, but not always — sticking to one size can
+      // line the rows up better. Both are laid out and compared.
+      const stockSets = [stockSizes];
+      if (stockSizes.length > 1) stockSizes.forEach(s => stockSets.push([s]));
+      const combos = [];
+      gaps.forEach(gap => stockSets.forEach(set => combos.push([gap, set])));
+      combos.forEach(([gap, set]) => {
+        const bb = tryBandBatching(piecesArg, set, tolerance, gap);
+        if (!bb) return;
+        const remBest = bb.remainderPieces.length ? packAllVariants(bb.remainderPieces) : { sheets: [], unplaced: [] };
+        const mergedSheets = [...bb.bandSheets, ...remBest.sheets];
+        const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
+        const c = cost(merged);
+        if (c < cost(localBest)) { merged.cost = c; localBest = merged; }
+      });
+    }
+
+    // Batch big groups of identical-size pieces into fully tiled grid sheets (see
+    // tryGridBatching) before handing whatever's left to the normal search above.
+    // This is what closes the gap with how anh Tùng actually cuts a large batch by
+    // hand — deliberately shrinking every piece a little so the whole batch tiles one
+    // sheet cleanly, instead of the shelf-packer only shrinking a piece when it's the
+    // sole way to squeeze it into whatever gap happens to be open.
+    const GRID_PLANS = [];
+    ['full', 'ceil'].forEach(mode => ['capacity', 'glass', 'snug'].forEach(stockPick => GRID_PLANS.push([mode, stockPick])));
+    GRID_PLANS.forEach(([mode, stockPick]) => {
+      const gb = tryGridBatching(piecesArg, stockSizes, tolerance, mode, stockPick);
+      if (!gb) return;
+      const remBest = gb.remainderPieces.length
+        ? packAllVariants(gb.remainderPieces)
+        : { sheets: [], unplaced: [] };
+      const mergedSheets = [...gb.gridSheets, ...remBest.sheets];
       const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
       const c = cost(merged);
-      if (c < cost(best)) { merged.cost = c; best = merged; }
+      if (c < cost(localBest)) { merged.cost = c; localBest = merged; }
     });
+
+    return localBest;
   }
 
-  const GRID_PLANS = [];
-  ['full', 'ceil'].forEach(mode => ['capacity', 'glass'].forEach(stockPick => GRID_PLANS.push([mode, stockPick])));
-  GRID_PLANS.forEach(([mode, stockPick]) => {
-    const gb = tryGridBatching(pieces, stockSizes, tolerance, mode, stockPick);
-    if (!gb) return;
-    const remBest = gb.remainderPieces.length
-      ? packAllVariants(gb.remainderPieces)
-      : { sheets: [], unplaced: [] };
-    const mergedSheets = [...gb.gridSheets, ...remBest.sheets];
-    const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
-    const c = cost(merged);
-    if (c < cost(best)) { merged.cost = c; best = merged; }
-  });
+  let best = packBatched(pieces);
+
+  // Isolate one group of identical-size pieces onto its own dedicated sheet(s), pack
+  // everything else with the full packBatched search. Batching ALL eligible groups at
+  // once (GRID_PLANS above) can force an awkward partial grid on a DIFFERENT group as
+  // a side effect, which fragments the offcuts of THAT group instead — anh Tùng's own
+  // habit (13/08/2026) is to give one code its own whole sheet, shrink it to fit, and
+  // let the rest of the order pack normally, rather than interleave codes to squeeze
+  // out a few extra % of utilisation. Only kept if it wins on cost: same m² first
+  // (never spends an extra sheet just for tidiness), then real dead-glass area, then
+  // how many separate "giữ lại" offcuts are left over.
+  // Bounded to orders with a manageable number of distinct sizes (each candidate
+  // re-runs the full packBatched search on the rest of the order) and to groups with
+  // enough copies that "isolate on one sheet" is even a question.
+  {
+    const groupQty = new Map();
+    pieces.forEach(p => {
+      if (!p.qty || !p.w || !p.h) return;
+      let w = p.w, h = p.h; if (h > w) { const t = w; w = h; h = t; }
+      const key = round1(w) + 'x' + round1(h);
+      groupQty.set(key, (groupQty.get(key) || 0) + p.qty);
+    });
+    if (groupQty.size <= 10) {
+      const seen = new Set();
+      pieces.forEach(p => {
+        if (!p.qty || !p.w || !p.h) return;
+        let w = p.w, h = p.h; if (h > w) { const t = w; w = h; h = t; }
+        const key = round1(w) + 'x' + round1(h);
+        if (seen.has(key)) return;
+        seen.add(key);
+        if ((groupQty.get(key) || 0) < 3) return;
+        const groupPieces = pieces.filter(q => {
+          if (!q.qty || !q.w || !q.h) return false;
+          let qw = q.w, qh = q.h; if (qh > qw) { const t = qw; qw = qh; qh = t; }
+          return (round1(qw) + 'x' + round1(qh)) === key;
+        });
+        const otherPieces = pieces.filter(q => !groupPieces.includes(q));
+        const gb = tryGridBatching(groupPieces, stockSizes, tolerance, 'ceil', 'snug');
+        if (!gb || !gb.gridSheets.length) return;
+        const remainderExtra = gb.remainderPieces;
+        const remBest = (otherPieces.length || remainderExtra.length)
+          ? packBatched([...otherPieces, ...remainderExtra])
+          : { sheets: [], unplaced: [] };
+        const mergedSheets = [...gb.gridSheets, ...remBest.sheets];
+        const merged = { sheets: mergedSheets, unplaced: remBest.unplaced || [], ...finalizeSheets(mergedSheets, rules) };
+        const c = cost(merged);
+        if (c < cost(best)) { merged.cost = c; best = merged; }
+      });
+    }
+  }
 
   return best;
 }
@@ -2230,5 +2552,6 @@ renderStockTable();
 renderDemandTable();
 renderOffcutRuleHint();
 </script>
-</body>
-</html>
+
+
+</body></html>
