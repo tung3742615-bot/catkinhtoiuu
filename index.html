@@ -576,6 +576,7 @@ function renderDemandTable(){
       <td><input type="text" data-id="${row.id}" data-f="code" value="${row.code ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="w" value="${row.w ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="h" value="${row.h ?? ''}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="qty" value="${row.qty ?? 1}"></td>
       <td class="col-del"><button class="del-btn" data-id="${row.id}">✕</button></td>
     `;
     tbody.appendChild(tr);
