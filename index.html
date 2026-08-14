@@ -85,7 +85,7 @@
   <h1>🪟 Cắt Kính Tối Ưu</h1>
   <!-- Bump this whenever the algorithm changes: it is the only way to tell at a glance
        whether the browser is showing a fresh copy or a cached one. -->
-  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 13/08/2026-n · sửa lỗi tải file khi mở trực tiếp trên máy</div>
+  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 14/08/2026-a · mọi thợ đăng nhập đều thấy mục API key</div>
 </header>
 
 <main>
@@ -99,19 +99,19 @@
     <table id="accessTable">
       <thead><tr><th>Tên thợ</th><th style="width:100px">Mã</th><th style="width:60px">Admin</th><th class="col-del"></th></tr></thead>
       <tbody><tr>
-      <td><input type="text" data-i="0" data-f="name" value="Trung"></td>
-      <td><input type="text" data-i="0" data-f="code" value="1357" inputmode="numeric"></td>
+      <td><input type="text" data-i="0" data-f="name" value="Bình"></td>
+      <td><input type="text" data-i="0" data-f="code" value="1987" inputmode="numeric"></td>
       <td style="text-align:center"><input type="checkbox" data-i="0" data-f="admin"></td>
       <td class="col-del"><button class="del-btn" data-i="0">✕</button></td>
     </tr><tr>
-      <td><input type="text" data-i="1" data-f="name" value="Bình"></td>
-      <td><input type="text" data-i="1" data-f="code" value="2468" inputmode="numeric"></td>
-      <td style="text-align:center"><input type="checkbox" data-i="1" data-f="admin"></td>
+      <td><input type="text" data-i="1" data-f="name" value="Tùng"></td>
+      <td><input type="text" data-i="1" data-f="code" value="1996" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="1" data-f="admin" checked=""></td>
       <td class="col-del"><button class="del-btn" data-i="1">✕</button></td>
     </tr><tr>
-      <td><input type="text" data-i="2" data-f="name" value="Tùng"></td>
-      <td><input type="text" data-i="2" data-f="code" value="9090" inputmode="numeric"></td>
-      <td style="text-align:center"><input type="checkbox" data-i="2" data-f="admin" checked=""></td>
+      <td><input type="text" data-i="2" data-f="name" value="Trung"></td>
+      <td><input type="text" data-i="2" data-f="code" value="2000" inputmode="numeric"></td>
+      <td style="text-align:center"><input type="checkbox" data-i="2" data-f="admin"></td>
       <td class="col-del"><button class="del-btn" data-i="2">✕</button></td>
     </tr></tbody>
     </table>
@@ -122,7 +122,7 @@
     <div id="accessMsg" class="muted" style="margin-top: 8px; color: rgb(134, 239, 172);">Đang tạo file...</div>
   </div>
 
-  <!-- API KEY (chỉ admin thấy) -->
+  <!-- API KEY (mọi thợ đăng nhập đều thấy — mỗi người tự dán key riêng vào máy mình) -->
   <div class="card hidden" id="apiKeyCard">
     <h2>1. Gemini API key</h2>
     <p class="muted">Dùng để đọc số đo từ ảnh chụp giấy viết tay. Lấy miễn phí tại
@@ -137,7 +137,7 @@
   <!-- LEARNING DATA (chỉ admin thấy) -->
   <div class="card hidden" id="learningCard">
     <h2>2. Dữ liệu học của AI (đọc chữ càng ngày càng chính xác)</h2>
-    <div id="learningStatsBox" class="muted learn-box">Cấp độ học: <b>L0 — Chưa có dữ liệu học</b><br>Đã xử lý 9 ảnh, 77 dòng, sửa 0 lần — độ chính xác ước tính 100%</div>
+    <div id="learningStatsBox" class="muted learn-box">Cấp độ học: <b>L0 — Chưa có dữ liệu học</b><br>Đã xử lý 0 ảnh, 0 dòng, sửa 0 lần — độ chính xác ước tính 100%</div>
     <div class="row" style="margin-top:8px;">
       <button class="btn secondary small" id="btnExportLearning">⬇️ Sao lưu</button>
       <button class="btn secondary small" id="btnImportLearning">⬆️ Nhập dữ liệu học (.json)</button>
@@ -160,11 +160,11 @@
       <td class="col-del"><button class="del-btn" data-idx="1">✕</button></td>
     </tr><tr>
       <td><input type="number" data-idx="2" class="stock-thickness" value="5"></td>
-      <td><textarea class="sizes" data-idx="2">2140x3050, 1830x2440, 1680x2135</textarea></td>
+      <td><textarea class="sizes" data-idx="2">2130x3050, 1830x2440, 2400x3050</textarea></td>
       <td class="col-del"><button class="del-btn" data-idx="2">✕</button></td>
     </tr><tr>
       <td><input type="number" data-idx="3" class="stock-thickness" value="6"></td>
-      <td><textarea class="sizes" data-idx="3">1830x2440, 2140x3050</textarea></td>
+      <td><textarea class="sizes" data-idx="3">2130x3050</textarea></td>
       <td class="col-del"><button class="del-btn" data-idx="3">✕</button></td>
     </tr><tr>
       <td><input type="number" data-idx="4" class="stock-thickness" value="8"></td>
@@ -203,7 +203,7 @@
       <label class="muted" style="flex:1;">Trong CÙNG một hàng, cho phép các mã lệch chiều cao tối đa (mm) — phần thừa phía trên tấm ngắn hơn coi như bỏ đi</label>
       <input type="number" id="maxRowGapInput" style="width:80px;">
     </div>
-    <div id="offcutRuleHint" class="muted">Phần thừa có chiều nhỏ nhất trong khoảng 60–250mm là "khó dùng" — phần mềm sẽ cố tránh tạo ra loại này.</div>
+    <div id="offcutRuleHint" class="muted">Phần thừa có chiều nhỏ nhất trong khoảng 100–300mm là "khó dùng" — phần mềm sẽ cố tránh tạo ra loại này.</div>
     <div class="row" style="margin-top:10px;align-items:flex-start;">
       <input type="checkbox" id="allowExtraSheetInput" style="margin-top:2px;">
       <label class="muted" for="allowExtraSheetInput" style="flex:1;">Cho phép dùng thêm tối đa 1 tấm/độ dày nếu nhờ đó tránh được HOÀN TOÀN phần thừa khó dùng</label>
@@ -270,9 +270,9 @@
 // này để tìm và thay khối bên dưới khi tạo file mới.
 /* ACCESS_CODES_START */
 const ACCESS_CODES = {
-  '2000': { name: 'Trung', admin: false },
   '1987': { name: 'Bình', admin: false },
   '1996': { name: 'Tùng', admin: true },
+  '2000': { name: 'Trung', admin: false },
 };
 /* ACCESS_CODES_END */
 let CK_CURRENT_CODE = null;
@@ -321,11 +321,15 @@ let ckAccessRows = []; // [{code,name,admin}] — khai báo trước vì có th�
 // — không cần đụng vào code. Vẫn phải upload file đó lên GitHub như mọi lần khác vì
 // app này không có server riêng để tự lưu cho mọi thiết bị cùng thấy.
 function initAccessAdmin(){
-  // Mấy mục này chỉ chủ xưởng (mã admin:true) mới cần thấy — thợ cắt kính chỉ cần
-  // dùng phần chia kính, không cần đụng API key / dữ liệu học AI / quản lý mã.
+  // "Quản lý mã thợ" và "Dữ liệu học AI" chỉ chủ xưởng (mã admin:true) mới cần thấy.
+  // Riêng "API key" thì MỌI thợ đều thấy (xử lý ở dòng ngay trên) vì mỗi thợ dùng
+  // máy/điện thoại riêng, cần tự dán key Gemini của mình vào máy đó.
   const me = ACCESS_CODES[CK_CURRENT_CODE];
   const isAdmin = !!(me && me.admin);
-  ['accessAdminCard', 'apiKeyCard', 'learningCard'].forEach(id => {
+  // Mục API key: MỌI thợ đã đăng nhập đều thấy, vì mỗi người dùng máy riêng cần tự
+  // dán key Gemini của mình (key chỉ lưu trên máy đó, không dùng chung được).
+  document.getElementById('apiKeyCard').classList.remove('hidden');
+  ['accessAdminCard', 'learningCard'].forEach(id => {
     document.getElementById(id).classList.toggle('hidden', !isAdmin);
   });
   if (!isAdmin) return;
