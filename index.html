@@ -26,7 +26,7 @@
   input,select{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 7px;font-size:14px;width:100%;}
   input[type=number]{width:100%;}
   input[type=checkbox]{width:auto;height:18px;width:18px;accent-color:var(--accent2);}
-  #demandTable{min-width:480px;}
+  #demandTable{min-width:540px;}
   #demandTable .col-code{width:110px;} #demandTable .col-num{width:80px;} #demandTable .col-qty{width:60px;}
   #demandTable .col-th{width:70px;} #demandTable .col-del{width:40px;text-align:center;}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:#04121c;border:none;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:600;cursor:pointer;}
@@ -59,7 +59,7 @@
   #quickPreview .q-ok{color:#86efac;} #quickPreview .q-warn{color:#fbbf24;} #quickPreview .q-bad{color:#fca5a5;} #quickPreview .q-head{color:var(--muted);}
   @media print{
     body{background:#fff;color:#111;padding-bottom:0;}
-    header, #globalMsg, main > .card, #btnOptimize, #btnPrintExport, #printHint { display:none !important; }
+    header, #globalMsg, main > .card, #btnOptimize, #thicknessMismatch, #btnPrintExport, #printHint { display:none !important; }
     main{padding:0;max-width:100%;}
     #resultsWrap .card{background:#fff;color:#111;box-shadow:none;border:1px solid #ccc;}
     .sheet-block{background:#f8f9fa;border:1px solid #ccc;page-break-inside:avoid;margin-bottom:14px;}
@@ -90,7 +90,7 @@
   <h1>🪟 Cắt Kính Tối Ưu</h1>
   <!-- Bump this whenever the algorithm changes: it is the only way to tell at a glance
        whether the browser is showing a fresh copy or a cached one. -->
-  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 07/10/2026-a · đọc ảnh nhanh hơn, tự đổi model khi quá tải, thêm ô Nhập nhanh</div>
+  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 07/10/2026-c · nhập độ dày SAU CÙNG, ngay trên nút Tối ưu cắt</div>
 </header>
 
 <main>
@@ -218,21 +218,17 @@
   <!-- DEMAND INPUT -->
   <div class="card">
     <h2>4. Danh sách kính cần cắt (từ khổ nguyên)</h2>
-    <p class="muted">Chụp ảnh giấy viết tay hoặc bảng số đo kính in sẵn (chỉ chụp phần CHƯA bị loại bỏ / phần bắt buộc cắt từ kính nguyên khổ). Có thể chụp nhiều ảnh để gộp nhiều đợt / nhiều khổ. Mỗi ảnh cần nhập độ dày riêng ở ô bên dưới trước khi chụp.</p>
+    <p class="muted">Chụp ảnh giấy viết tay hoặc bảng số đo kính in sẵn (chỉ chụp phần CHƯA bị loại bỏ / phần bắt buộc cắt từ kính nguyên khổ). Có thể chụp nhiều ảnh để gộp nhiều đợt / nhiều khổ. Độ dày kính nhập SAU CÙNG, ở ô ngay trên nút "Tối ưu cắt".</p>
 
     <div class="row">
       <label class="muted" style="flex:1;">Dung sai cho phép hụt tối đa (mm) — áp dụng cho MỌI dòng (đặt 0 nếu không cho hụt)</label>
       <input type="number" id="toleranceInput" style="width:70px;" value="4">
     </div>
 
-    <div class="row">
-      <label class="muted" style="flex:1;">Độ dày kính (mm) cho ảnh sắp chụp — anh tự nhập, AI không tự đoán độ dày</label>
-      <input type="number" id="captureThicknessInput" style="width:70px;" placeholder="vd: 6">
-    </div>
 
     <div class="quick-box">
       <h3>⌨️ Nhập nhanh (không cần AI, không cần mạng)</h3>
-      <p class="muted" style="margin:0 0 6px;">Mỗi dòng một loại kính, gõ như viết giấy: <b>dài x rộng = số lượng</b> (không cần dấu x cũng được: <b>800 400 3</b>). Độ dày lấy theo ô "Độ dày kính" ở trên; lô khác độ dày thì ghi thêm vào dòng (vd <b>8ly</b>) hoặc gõ một dòng riêng "8ly" phía trên lô đó.</p>
+      <p class="muted" style="margin:0 0 6px;">Mỗi dòng một loại kính, gõ như viết giấy: <b>dài x rộng = số lượng</b> (không cần dấu x cũng được: <b>800 400 3</b>). Độ dày nhập sau, ở ô ngay trên nút "Tối ưu cắt"; riêng lô khác độ dày thì ghi thêm vào dòng (vd <b>8ly</b>) hoặc gõ một dòng riêng "8ly" phía trên lô đó.</p>
       <textarea id="quickInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="1200x600=2&#10;800 400 3&#10;8ly&#10;1500x700=1"></textarea>
       <div id="quickPreview"></div>
       <div class="row">
@@ -262,21 +258,27 @@
     <div class="table-scroll">
       <table id="demandTable" style="margin-top:10px;">
         <thead><tr>
-          <th class="col-code">Mã</th><th class="col-num">Dài</th><th class="col-num">Rộng</th><th class="col-qty">SL</th><th class="col-del"></th>
+          <th class="col-code">Mã</th><th class="col-num">Dài</th><th class="col-num">Rộng</th><th class="col-qty">SL</th><th class="col-th">Dày</th><th class="col-del"></th>
         </tr></thead>
         <tbody></tbody>
       </table>
     </div>
-    <p class="muted" style="margin-top:6px;">Độ dày lấy theo ô "Độ dày kính cho ảnh sắp chụp" ở trên tại thời điểm thêm dòng — đổi độ dày ở đó trước khi thêm dòng cho lô kính khác độ dày.</p>
+    <p class="muted" style="margin-top:6px;">Cột "Dày" để trống = lấy theo ô "Độ dày kính" ở cuối mục này. Chỉ điền cột "Dày" cho những dòng có độ dày KHÁC với cả bảng.</p>
     <div class="row" style="margin-top:8px;">
       <button class="btn secondary small" id="addDemandRow">+ Thêm dòng thủ công</button>
       <button class="btn secondary small" id="clearDemandTable" style="color:#fca5a5;">🗑️ Xóa bảng tính</button>
       <button class="btn secondary small" id="btnVoiceToggle">🎤 Nhập bằng giọng nói: TẮT</button>
     </div>
     <div id="voiceStatus" class="muted" style="margin-top:4px;"></div>
+
+    <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+      <label style="flex:1;font-weight:600;">Độ dày kính (mm) của bảng trên — nhập xong rồi bấm "Tối ưu cắt"</label>
+      <input type="number" id="captureThicknessInput" inputmode="decimal" style="width:90px;font-size:18px;font-weight:700;text-align:center;" placeholder="vd: 5">
+    </div>
   </div>
 
   <button class="btn big" id="btnOptimize">🔧 Tối ưu cắt</button>
+  <div id="thicknessMismatch"></div>
   <button class="btn secondary block hidden" id="btnPrintExport" style="margin-top:8px;">🖨️ Xuất PDF / In kết quả</button>
   <p class="muted hidden" id="printHint" style="text-align:center;margin-top:6px;">Trên iPhone: ở màn hình xem trước, bấm vào ảnh xem trước để phóng to rồi bấm biểu tượng Chia sẻ để lưu thành PDF.</p>
 
@@ -791,6 +793,7 @@ document.getElementById('captureThicknessInput').addEventListener('change', e=>{
   const v = parseFloat(e.target.value);
   state.captureThickness = isNaN(v) ? '' : v;
   saveCaptureThickness(state.captureThickness);
+  renderDemandTable();
 });
 
 /* ================= STOCK TABLE UI ================= */
@@ -850,6 +853,7 @@ function renderDemandTable(){
       <td><input type="number" data-id="${row.id}" data-f="w" value="${row.w ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="h" value="${row.h ?? ''}"></td>
       <td><input type="number" data-id="${row.id}" data-f="qty" value="${row.qty ?? 1}"></td>
+      <td><input type="number" data-id="${row.id}" data-f="thickness" value="${row.thickness || ''}" placeholder="${state.captureThickness || ''}"></td>
       <td class="col-del"><button class="del-btn" data-id="${row.id}">✕</button></td>
     `;
     tbody.appendChild(tr);
@@ -860,9 +864,11 @@ function renderDemandTable(){
       const row = state.demand.find(d=>d.id===id);
       const f = e.target.dataset.f;
       row[f] = (f==='code' || f==='ghichu') ? e.target.value : parseFloat(e.target.value)||0;
+      if(f==='thickness' && !(row.thickness > 0)) row.thickness = '';   // để trống = theo ô "Độ dày kính"
       saveDemand();
+      if(f==='thickness') updateThicknessMismatch();
     });
-    if(voiceModeOn) attachVoiceInput(inp);
+    if(voiceModeOn && inp.dataset.f !== 'thickness') attachVoiceInput(inp);
   });
   tbody.querySelectorAll('.del-btn').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -871,15 +877,43 @@ function renderDemandTable(){
       saveDemand(); renderDemandTable();
     });
   });
+  updateThicknessMismatch();
+}
+
+// Dòng để trống cột "Dày" sẽ lấy theo ô "Độ dày kính" (ở cuối mục 4) tại lúc bấm Tối ưu cắt.
+// Dòng có ghi riêng độ dày khác với ô đó thì báo ngay dưới ô + cho 1 nút đưa cả bảng về theo ô.
+function updateThicknessMismatch(){
+  const el = document.getElementById('thicknessMismatch');
+  if(!el) return;
+  const cur = parseFloat(state.captureThickness);
+  if(!(cur > 0)){ el.innerHTML = ''; return; }
+  const others = {};
+  state.demand.forEach(d=>{
+    const t = parseFloat(d.thickness) || 0;
+    if(t > 0 && t !== cur) others[t] = (others[t]||0) + 1;
+  });
+  const keys = Object.keys(others).sort((x,y)=>x-y);
+  if(keys.length === 0){ el.innerHTML = ''; return; }
+  const desc = keys.map(k=> `${others[k]} dòng ghi riêng dày ${fmt(k)}mm`).join(', ');
+  el.innerHTML = `<div class="warn" style="margin-top:6px;">Trong bảng có ${desc} ở cột "Dày" — các dòng này KHÔNG theo ô "Độ dày kính" (${fmt(cur)}mm).
+    <div style="margin-top:8px;"><button class="btn small" id="btnApplyThicknessAll">Cho cả bảng dày ${fmt(cur)}mm</button></div></div>`;
+  document.getElementById('btnApplyThicknessAll').addEventListener('click', ()=>{
+    state.demand.forEach(d=>{ d.thickness = ''; });
+    saveDemand(); renderDemandTable();
+    showMsg('ok', `Cả bảng (${state.demand.length} dòng) giờ tính theo độ dày ${fmt(cur)}mm.`);
+  });
 }
 document.getElementById('addDemandRow').addEventListener('click', ()=>{
-  state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness: state.captureThickness || '', ghichu:''});
+  state.demand.push({id:state.nextId++, code:'', w:'', h:'', qty:1, thickness:'', ghichu:''});
   saveDemand(); renderDemandTable();
 });
 document.getElementById('clearDemandTable').addEventListener('click', ()=>{
   if(state.demand.length===0) return;
   if(!confirm('Xóa toàn bộ bảng tính hiện tại? Không thể hoàn tác.')) return;
   state.demand = [];
+  // Bảng mới = việc mới: xóa luôn ô độ dày để buộc nhập lại, tránh dùng nhầm độ dày của lô trước.
+  state.captureThickness = ''; saveCaptureThickness('');
+  document.getElementById('captureThicknessInput').value = '';
   saveDemand(); renderDemandTable();
   document.getElementById('resultsWrap').innerHTML = '';
   document.getElementById('btnPrintExport').classList.add('hidden');
@@ -1101,11 +1135,10 @@ function quickParseLine(raw){
   return { type:'bad', raw };
 }
 
-// Độ dày của 1 dòng: ghi ngay trong dòng → dòng tiêu đề / dòng gần nhất phía trên có ghi → ô "Độ dày kính" ở trên
+// Độ dày của 1 dòng: ghi ngay trong dòng → dòng tiêu đề / dòng gần nhất phía trên có ghi → để trống (theo ô "Độ dày kính" ở cuối mục 4)
 function quickParseText(text){
   const lines = text.split(/\r?\n|;/).map(l=>l.trim()).filter(Boolean);
   let curThickness = null, groupNote = '';
-  const fallback = (state.captureThickness && state.captureThickness > 0) ? state.captureThickness : null;
   const out = [];
   lines.forEach(line=>{
     const r = quickParseLine(line);
@@ -1114,7 +1147,7 @@ function quickParseText(text){
       curThickness = r.thickness; groupNote = r.note;
     } else if(r.type === 'item'){
       if(r.thickness != null) curThickness = r.thickness;
-      else r.thickness = curThickness != null ? curThickness : fallback;
+      else r.thickness = curThickness;   // null = để trống, lấy theo ô "Độ dày kính" lúc tối ưu
       r.note = [groupNote, r.note].filter(Boolean).join(', ');
     }
     out.push(r);
@@ -1129,13 +1162,12 @@ const quickPreview = document.getElementById('quickPreview');
 
 function renderQuickPreview(){
   const parsed = quickParseText(quickInput.value);
-  const ready = parsed.filter(r=>r.type==='item' && r.thickness != null);
+  const ready = parsed.filter(r=>r.type==='item');
   quickPreview.innerHTML = parsed.map(r=>{
     if(r.type === 'header') return `<div class="q-head">▸ Nhóm: ${fmt(r.thickness)}ly${r.note ? ' — ' + escHtml(r.note) : ''}</div>`;
     if(r.type === 'bad')    return `<div class="q-bad">✗ Không hiểu: "${escHtml(r.raw)}"</div>`;
-    const noTh = r.thickness == null;
-    return `<div class="${noTh ? 'q-warn' : 'q-ok'}">${noTh ? '⚠' : '✓'} ${r.code ? escHtml(r.code) + ': ' : ''}${fmt(r.w)} x ${fmt(r.h)} = ${r.qty}` +
-      ` · ${noTh ? 'CHƯA CÓ ĐỘ DÀY — nhập ô "Độ dày kính" ở trên hoặc ghi thêm vd 5ly' : 'dày ' + fmt(r.thickness) + 'ly'}${r.note ? ' · ' + escHtml(r.note) : ''}</div>`;
+    const thTxt = r.thickness != null ? ' · dày ' + fmt(r.thickness) + 'ly' : '';
+    return `<div class="q-ok">✓ ${r.code ? escHtml(r.code) + ': ' : ''}${fmt(r.w)} x ${fmt(r.h)} = ${r.qty}${thTxt}${r.note ? ' · ' + escHtml(r.note) : ''}</div>`;
   }).join('');
   document.getElementById('btnQuickAdd').textContent = ready.length ? `➕ Thêm ${ready.length} dòng vào bảng` : '➕ Thêm vào bảng';
   return parsed;
@@ -1152,24 +1184,21 @@ document.getElementById('captureThicknessInput').addEventListener('change', ()=>
 
 document.getElementById('btnQuickAdd').addEventListener('click', ()=>{
   const parsed = renderQuickPreview();
-  const ready = parsed.filter(r=>r.type==='item' && r.thickness != null);
-  const noTh  = parsed.filter(r=>r.type==='item' && r.thickness == null);
+  const ready = parsed.filter(r=>r.type==='item');
   const bad   = parsed.filter(r=>r.type==='bad');
   if(!ready.length){
-    showMsg('warn', noTh.length ? 'Chưa có độ dày — nhập ô "Độ dày kính" ở trên, hoặc ghi thêm vào dòng (vd 5ly).'
-      : (bad.length ? 'Chưa hiểu được dòng nào — xem các dòng báo đỏ dưới ô nhập.' : 'Chưa có gì để thêm. Gõ ví dụ: 1200x600=2'));
+    showMsg('warn', bad.length ? 'Chưa hiểu được dòng nào — xem các dòng báo đỏ dưới ô nhập.' : 'Chưa có gì để thêm. Gõ ví dụ: 1200x600=2');
     return;
   }
   ready.forEach(r=>{
-    state.demand.push({ id: state.nextId++, code: r.code, w: r.w, h: r.h, qty: r.qty, thickness: r.thickness, ghichu: r.note });
+    state.demand.push({ id: state.nextId++, code: r.code, w: r.w, h: r.h, qty: r.qty, thickness: r.thickness != null ? r.thickness : '', ghichu: r.note });
   });
   saveDemand(); renderDemandTable();
-  // Giữ lại những dòng chưa thêm được (chưa hiểu / thiếu độ dày) để anh sửa tiếp
-  quickInput.value = parsed.filter(r=>r.type==='bad' || (r.type==='item' && r.thickness == null)).map(r=>r.raw).join('\n');
+  // Giữ lại những dòng chưa hiểu để anh sửa tiếp, xóa phần đã thêm
+  quickInput.value = bad.map(r=>r.raw).join('\n');
   try{ localStorage.setItem(LS_KEYS.quickDraft, quickInput.value); }catch(e){}
   renderQuickPreview();
-  const left = bad.length + noTh.length;
-  showMsg(left ? 'warn' : 'ok', `Đã thêm ${ready.length} dòng vào bảng.` + (left ? ` Còn ${left} dòng chưa thêm được, vẫn nằm trong ô nhập.` : ''));
+  showMsg(bad.length ? 'warn' : 'ok', `Đã thêm ${ready.length} dòng vào bảng.` + (bad.length ? ` Còn ${bad.length} dòng chưa hiểu, vẫn nằm trong ô nhập.` : ''));
 });
 document.getElementById('btnQuickClear').addEventListener('click', ()=>{
   quickInput.value = '';
@@ -1193,11 +1222,6 @@ function canCaptureImage(){
   if(!key){
     statusEl.innerHTML = `<div class="warn">Chưa có Gemini API key. Kéo lên mục 1 ở đầu trang, dán key rồi bấm Lưu, sau đó quay lại bấm nút này.</div>`;
     showMsg('warn','Chưa có Gemini API key. Dán vào mục 1 ở trên rồi bấm Lưu.');
-    return false;
-  }
-  if(!state.captureThickness || state.captureThickness<=0){
-    statusEl.innerHTML = `<div class="warn">Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay phía trên nút rồi bấm lại.</div>`;
-    showMsg('warn','Chưa nhập độ dày kính cho ảnh này. Nhập độ dày (mm) ở ô ngay trên nút chụp rồi thử lại.');
     return false;
   }
   return true;
@@ -1458,7 +1482,7 @@ async function runOCR(base64, mimeType, imageLabel){
       return;
     }
     const batchId = state.nextBatchId++;
-    const thickness = state.captureThickness || 0;
+    const thickness = '';   // độ dày nhập sau cùng, ở ô ngay trên nút Tối ưu cắt
     arr.forEach(item=>{
       const w = parseFloat(item.w)||0, h = parseFloat(item.h)||0;
       const qty = parseInt(item.qty)||1;
@@ -1468,7 +1492,7 @@ async function runOCR(base64, mimeType, imageLabel){
         code: item.code || '',
         w, h, qty, thickness, ghichu,
         _ocrBatch: batchId,
-        _ocrSnapshot: { dai:w, rong:h, so_luong:qty, loai_kinh:ghichu, do_kinh:thickness },
+        _ocrSnapshot: { dai:w, rong:h, so_luong:qty, loai_kinh:ghichu, do_kinh:0 },
         _recorded: false
       });
     });
@@ -2708,7 +2732,7 @@ function recordPendingLearningBatches(){
   batchIds.forEach(bid=>{
     const rows = batches[bid];
     const aiRows = rows.map(r=>r._ocrSnapshot || {});
-    const finalRows = rows.map(r=>({ dai:r.w, rong:r.h, so_luong:r.qty, loai_kinh:r.ghichu||'', do_kinh:r.thickness||0 }));
+    const finalRows = rows.map(r=>({ dai:r.w, rong:r.h, so_luong:r.qty, loai_kinh:r.ghichu||'', do_kinh:(r._ocrSnapshot ? r._ocrSnapshot.do_kinh : (r.thickness||0)) }));
     learningRecordBatch(aiRows, finalRows, `phiên ${new Date().toLocaleString('vi-VN')}`);
     rows.forEach(r=> r._recorded = true);
   });
@@ -2723,6 +2747,20 @@ function runOptimize(){
   if(state.demand.length===0){ showMsg('warn','Chưa có kính nào cần cắt.'); return; }
   if(invalidRows.length){ showMsg('warn', `${invalidRows.length} dòng thiếu Dài/Rộng/SL — kiểm tra lại bảng.`); }
 
+  // Độ dày: dòng nào để trống cột "Dày" thì lấy theo ô "Độ dày kính" ngay trên nút này.
+  const thBox = document.getElementById('captureThicknessInput');
+  const thBoxVal = parseFloat(thBox.value);
+  const defaultTh = thBoxVal > 0 ? thBoxVal : 0;
+  if(defaultTh && defaultTh !== state.captureThickness){ state.captureThickness = defaultTh; saveCaptureThickness(defaultTh); renderDemandTable(); }
+  const noThRows = state.demand.filter(d=> d.w && d.h && d.qty && !(parseFloat(d.thickness) > 0));
+  if(noThRows.length && !defaultTh){
+    document.getElementById('thicknessMismatch').innerHTML = `<div class="err" style="margin-top:6px;">Chưa nhập độ dày kính. Nhập độ dày (mm) vào ô ngay trên nút "Tối ưu cắt" rồi bấm lại.</div>`;
+    showMsg('warn', 'Chưa nhập độ dày kính — nhập vào ô ngay trên nút "Tối ưu cắt".');
+    if(typeof thBox.scrollIntoView === 'function') thBox.scrollIntoView({behavior:'smooth', block:'center'});
+    thBox.focus();
+    return;
+  }
+
   const tolerance = state.tolerance || 0;
   const rules = { minKeep: state.minKeep || 0, maxTrash: state.maxTrash || 0, maxRowGap: state.maxRowGap || 0, allowExtraSheet: !!state.allowExtraSheet };
 
@@ -2730,7 +2768,7 @@ function runOptimize(){
   const groups = {};
   state.demand.forEach(d=>{
     if(!d.w || !d.h || !d.qty) return;
-    const th = d.thickness || 0;
+    const th = parseFloat(d.thickness) > 0 ? parseFloat(d.thickness) : defaultTh;
     if(!groups[th]) groups[th] = [];
     groups[th].push({code:d.code, w:d.w, h:d.h, qty:d.qty});
   });
