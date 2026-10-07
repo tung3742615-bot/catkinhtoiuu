@@ -52,6 +52,11 @@
   textarea.sizes{width:100%;min-height:34px;resize:vertical;}
   .shrink-tag{color:#f59e0b;font-weight:600;}
   .learn-box{line-height:1.6;}
+  .quick-box{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:10px;margin:10px 0;}
+  .quick-box h3{margin:0 0 4px;font-size:14px;color:var(--accent2);}
+  #quickInput{width:100%;min-height:96px;resize:vertical;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-size:16px;line-height:1.5;font-family:inherit;}
+  #quickPreview{font-size:13px;line-height:1.6;margin:6px 0;}
+  #quickPreview .q-ok{color:#86efac;} #quickPreview .q-warn{color:#fbbf24;} #quickPreview .q-bad{color:#fca5a5;} #quickPreview .q-head{color:var(--muted);}
   @media print{
     body{background:#fff;color:#111;padding-bottom:0;}
     header, #globalMsg, main > .card, #btnOptimize, #btnPrintExport, #printHint { display:none !important; }
@@ -85,7 +90,7 @@
   <h1>🪟 Cắt Kính Tối Ưu</h1>
   <!-- Bump this whenever the algorithm changes: it is the only way to tell at a glance
        whether the browser is showing a fresh copy or a cached one. -->
-  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 14/08/2026-a · mọi thợ đăng nhập đều thấy mục API key</div>
+  <div class="muted" style="font-size:11px;margin-top:-6px;">Phiên bản 07/10/2026-a · đọc ảnh nhanh hơn, tự đổi model khi quá tải, thêm ô Nhập nhanh</div>
 </header>
 
 <main>
@@ -223,6 +228,25 @@
     <div class="row">
       <label class="muted" style="flex:1;">Độ dày kính (mm) cho ảnh sắp chụp — anh tự nhập, AI không tự đoán độ dày</label>
       <input type="number" id="captureThicknessInput" style="width:70px;" placeholder="vd: 6">
+    </div>
+
+    <div class="quick-box">
+      <h3>⌨️ Nhập nhanh (không cần AI, không cần mạng)</h3>
+      <p class="muted" style="margin:0 0 6px;">Mỗi dòng một loại kính, gõ như viết giấy: <b>dài x rộng = số lượng</b> (không cần dấu x cũng được: <b>800 400 3</b>). Độ dày lấy theo ô "Độ dày kính" ở trên; lô khác độ dày thì ghi thêm vào dòng (vd <b>8ly</b>) hoặc gõ một dòng riêng "8ly" phía trên lô đó.</p>
+      <textarea id="quickInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="1200x600=2&#10;800 400 3&#10;8ly&#10;1500x700=1"></textarea>
+      <div id="quickPreview"></div>
+      <div class="row">
+        <button class="btn" id="btnQuickAdd" style="flex:1;">➕ Thêm vào bảng</button>
+        <button class="btn secondary" id="btnQuickClear">Xóa ô nhập</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label class="muted" style="flex:1;">Chế độ đọc ảnh</label>
+      <select id="ocrModeSelect" style="width:auto;">
+        <option value="fast">⚡ Nhanh (khuyên dùng)</option>
+        <option value="accurate">🎯 Kỹ (chậm hơn, cho chữ khó đọc)</option>
+      </select>
     </div>
 
     <div class="row">
@@ -430,7 +454,7 @@ document.getElementById('downloadAccessFile')?.addEventListener('click', async (
 
 <script>
 /* ================= STORAGE ================= */
-const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash', maxRowGap:'ck_max_row_gap', allowExtraSheet:'ck_allow_extra_sheet' };
+const LS_KEYS = { apiKey:'ck_apikey', stock:'ck_stock', demand:'ck_demand', tolerance:'ck_tolerance', learning:'ck_learning_db_v1', captureThickness:'ck_capture_thickness', minKeep:'ck_min_keep', maxTrash:'ck_max_trash', maxRowGap:'ck_max_row_gap', allowExtraSheet:'ck_allow_extra_sheet', ocrMode:'ck_ocr_mode', thinkCfg:'ck_ocr_think_cfg_v1', quickDraft:'ck_quick_draft' };
 const DEFAULT_STOCK = [
   {thickness:3,  sizes:[{w:1520,h:2140}]},
   {thickness:4,  sizes:[{w:1520,h:2140},{w:1680,h:2140}]},
@@ -1010,6 +1034,149 @@ function startVoiceCapture(inp){
   try{ rec.start(); }catch(e){ statusEl.textContent = 'Không mở được micro — thử bấm lại vào ô.'; }
 }
 
+/* ================= NHẬP NHANH (gõ / đọc giọng nói, không cần AI) ================= */
+// Bỏ dấu chấm ngăn hàng nghìn kiểu "1.200" → "1200" (bàn phím giọng nói tiếng Việt hay viết vậy)
+function quickJoinThousands(str){
+  return str.replace(/\d+(?:\.\d{3})+(?!\d)/g, m => (m.split('.')[0].length <= 3 ? m.replace(/\./g,'') : m));
+}
+function quickCleanNote(str){
+  return str.replace(/\s+/g,' ').replace(/^[\s,;:=\-–—.()]+|[\s,;:=\-–—(]+$/g,'').trim();
+}
+
+// Đọc 1 dòng. Trả về {type:'item'|'header'|'bad', ...}
+function quickParseLine(raw){
+  let rest = ' ' + raw.replace(/^\s*[-•+]\s*/, '').replace(/^\s*\d{1,2}[)\/]\s+/, '') + ' ';
+  let thickness = null, thicknessRaw = '';
+
+  // 1) Độ dày: "5ly", "5 li", "6.38ly", "dày 8"
+  let m = rest.match(/(\d+(?:[.,]\d+)?)\s*(?:ly|li)(?![a-zà-ỹ])/i) || rest.match(/dày\s*(\d+(?:[.,]\d+)?)(?:\s*mm)?/i);
+  if(m){
+    const val = parseFloat(m[1].replace(',', '.'));
+    if(val > 0){
+      thickness = val;                 // giữ nguyên số (vd 6.38) để khớp với độ dày khai ở mục 3
+      thicknessRaw = m[1].replace(',', '.') + 'ly';
+      rest = rest.replace(m[0], ' ');
+    }
+  }
+
+  rest = quickJoinThousands(rest);
+
+  // 2) Kích thước + số lượng
+  let w = 0, h = 0, qty = null;
+  const NUM = '(\\d+(?:\\.\\d+)?)';
+  const SEP = '(?:x|×|\\*|nhân)';
+  const UNIT = '(?:\\s*(?:tấm|cái|miếng|tam|cai|mieng)(?![a-zà-ỹ]))?';   // "2 tấm", "3 cái"
+  // "1200x600", "1200x600=2", "1200x600x2", "1200 nhân 600 bằng 2", "1200x600 2"
+  const mDim = rest.match(new RegExp(NUM + '\\s*' + SEP + '\\s*' + NUM + '(?:\\s*(?:=|bằng|' + SEP + '|sl|số lượng)\\s*:?\\s*(\\d+)|\\s+(\\d+)(?![\\d.]))?' + UNIT, 'i'));
+  if(mDim){
+    w = parseFloat(mDim[1]); h = parseFloat(mDim[2]);
+    if(mDim[3] || mDim[4]) qty = parseInt(mDim[3] || mDim[4]);
+    rest = rest.replace(mDim[0], ' ');
+  } else {
+    // Không có dấu x: "1200 600 2", "1200, 600", "1200 600 = 2" → dài rộng [số lượng]
+    const mSp = rest.match(new RegExp('(\\d{2,})[\\s,]+(\\d{2,})(?![\\d.])(?:(?:\\s*(?:=|bằng|sl|số lượng)\\s*:?\\s*|[\\s,]+)(\\d+)(?![\\d.]))?' + UNIT, 'i'));
+    if(mSp && parseFloat(mSp[1]) >= 50 && parseFloat(mSp[2]) >= 50){
+      w = parseFloat(mSp[1]); h = parseFloat(mSp[2]);
+      if(mSp[3]) qty = parseInt(mSp[3]);
+      rest = rest.replace(mSp[0], ' ');
+    }
+  }
+
+  if(w > 0 && h > 0){
+    // Số lượng viết kiểu khác: "sl 2", "2 tấm", "2 cái", "2 miếng"
+    if(qty == null){
+      const mq = rest.match(/(?:sl|số lượng)\s*:?\s*(\d+)/i) || rest.match(/(\d+)\s*(?:tấm|cái|miếng|tam|cai|mieng)(?![a-zà-ỹ])/i);
+      if(mq){ qty = parseInt(mq[1]); rest = rest.replace(mq[0], ' '); }
+    }
+    if(!qty || qty < 1) qty = 1;
+    // Mã ở đầu dòng: "K1: 1200x600"
+    let code = '';
+    const mCode = rest.match(/^\s*([A-Za-zÀ-ỹ0-9][\wÀ-ỹ.\-]{0,11})\s*:/);
+    if(mCode){ code = mCode[1]; rest = rest.replace(mCode[0], ' '); }
+    return { type:'item', code, w, h, qty, thickness, note: quickCleanNote(rest) };
+  }
+
+  // Không có kích thước: nếu có độ dày thì là dòng tiêu đề nhóm ("8ly", "5ly trắng")
+  if(thickness != null) return { type:'header', thickness, note: quickCleanNote(rest) };
+  return { type:'bad', raw };
+}
+
+// Độ dày của 1 dòng: ghi ngay trong dòng → dòng tiêu đề / dòng gần nhất phía trên có ghi → ô "Độ dày kính" ở trên
+function quickParseText(text){
+  const lines = text.split(/\r?\n|;/).map(l=>l.trim()).filter(Boolean);
+  let curThickness = null, groupNote = '';
+  const fallback = (state.captureThickness && state.captureThickness > 0) ? state.captureThickness : null;
+  const out = [];
+  lines.forEach(line=>{
+    const r = quickParseLine(line);
+    r.raw = line;
+    if(r.type === 'header'){
+      curThickness = r.thickness; groupNote = r.note;
+    } else if(r.type === 'item'){
+      if(r.thickness != null) curThickness = r.thickness;
+      else r.thickness = curThickness != null ? curThickness : fallback;
+      r.note = [groupNote, r.note].filter(Boolean).join(', ');
+    }
+    out.push(r);
+  });
+  return out;
+}
+
+function escHtml(str){ return String(str).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+const quickInput = document.getElementById('quickInput');
+const quickPreview = document.getElementById('quickPreview');
+
+function renderQuickPreview(){
+  const parsed = quickParseText(quickInput.value);
+  const ready = parsed.filter(r=>r.type==='item' && r.thickness != null);
+  quickPreview.innerHTML = parsed.map(r=>{
+    if(r.type === 'header') return `<div class="q-head">▸ Nhóm: ${fmt(r.thickness)}ly${r.note ? ' — ' + escHtml(r.note) : ''}</div>`;
+    if(r.type === 'bad')    return `<div class="q-bad">✗ Không hiểu: "${escHtml(r.raw)}"</div>`;
+    const noTh = r.thickness == null;
+    return `<div class="${noTh ? 'q-warn' : 'q-ok'}">${noTh ? '⚠' : '✓'} ${r.code ? escHtml(r.code) + ': ' : ''}${fmt(r.w)} x ${fmt(r.h)} = ${r.qty}` +
+      ` · ${noTh ? 'CHƯA CÓ ĐỘ DÀY — nhập ô "Độ dày kính" ở trên hoặc ghi thêm vd 5ly' : 'dày ' + fmt(r.thickness) + 'ly'}${r.note ? ' · ' + escHtml(r.note) : ''}</div>`;
+  }).join('');
+  document.getElementById('btnQuickAdd').textContent = ready.length ? `➕ Thêm ${ready.length} dòng vào bảng` : '➕ Thêm vào bảng';
+  return parsed;
+}
+
+try{ quickInput.value = localStorage.getItem(LS_KEYS.quickDraft) || ''; }catch(e){}
+quickInput.addEventListener('input', ()=>{
+  try{ localStorage.setItem(LS_KEYS.quickDraft, quickInput.value); }catch(e){}
+  renderQuickPreview();
+});
+// Đổi ô "Độ dày kính" thì phần xem trước phải tính lại
+document.getElementById('captureThicknessInput').addEventListener('input', ()=> setTimeout(renderQuickPreview, 0));
+document.getElementById('captureThicknessInput').addEventListener('change', ()=> setTimeout(renderQuickPreview, 0));
+
+document.getElementById('btnQuickAdd').addEventListener('click', ()=>{
+  const parsed = renderQuickPreview();
+  const ready = parsed.filter(r=>r.type==='item' && r.thickness != null);
+  const noTh  = parsed.filter(r=>r.type==='item' && r.thickness == null);
+  const bad   = parsed.filter(r=>r.type==='bad');
+  if(!ready.length){
+    showMsg('warn', noTh.length ? 'Chưa có độ dày — nhập ô "Độ dày kính" ở trên, hoặc ghi thêm vào dòng (vd 5ly).'
+      : (bad.length ? 'Chưa hiểu được dòng nào — xem các dòng báo đỏ dưới ô nhập.' : 'Chưa có gì để thêm. Gõ ví dụ: 1200x600=2'));
+    return;
+  }
+  ready.forEach(r=>{
+    state.demand.push({ id: state.nextId++, code: r.code, w: r.w, h: r.h, qty: r.qty, thickness: r.thickness, ghichu: r.note });
+  });
+  saveDemand(); renderDemandTable();
+  // Giữ lại những dòng chưa thêm được (chưa hiểu / thiếu độ dày) để anh sửa tiếp
+  quickInput.value = parsed.filter(r=>r.type==='bad' || (r.type==='item' && r.thickness == null)).map(r=>r.raw).join('\n');
+  try{ localStorage.setItem(LS_KEYS.quickDraft, quickInput.value); }catch(e){}
+  renderQuickPreview();
+  const left = bad.length + noTh.length;
+  showMsg(left ? 'warn' : 'ok', `Đã thêm ${ready.length} dòng vào bảng.` + (left ? ` Còn ${left} dòng chưa thêm được, vẫn nằm trong ô nhập.` : ''));
+});
+document.getElementById('btnQuickClear').addEventListener('click', ()=>{
+  quickInput.value = '';
+  try{ localStorage.setItem(LS_KEYS.quickDraft, ''); }catch(e){}
+  renderQuickPreview();
+});
+
 function showMsg(type, text){
   const el = document.getElementById('globalMsg');
   el.innerHTML = `<div class="${type}">${text}</div>`;
@@ -1036,17 +1203,64 @@ function canCaptureImage(){
   return true;
 }
 
-function processImageFile(file){
+/* ---- Chế độ đọc: Nhanh / Kỹ ---- */
+const ocrModeSelect = document.getElementById('ocrModeSelect');
+ocrModeSelect.value = localStorage.getItem(LS_KEYS.ocrMode) === 'accurate' ? 'accurate' : 'fast';
+ocrModeSelect.addEventListener('change', ()=> localStorage.setItem(LS_KEYS.ocrMode, ocrModeSelect.value));
+
+/* ---- Thu nhỏ ảnh trước khi gửi: ảnh điện thoại 3-8MB → vài trăm KB, tải lên nhanh hơn nhiều ---- */
+const OCR_MAX_SIDE = 2000;      // cạnh dài tối đa (px) — vẫn đủ nét để đọc chữ số viết tay
+const OCR_JPEG_QUALITY = 0.85;
+
+function readFileAsDataURL(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result);
+    r.onerror = ()=> reject(new Error('Không đọc được file ảnh.'));
+    r.readAsDataURL(file);
+  });
+}
+function loadImageEl(src){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = ()=> reject(new Error('Không mở được ảnh.'));
+    img.src = src;
+  });
+}
+async function prepareImage(file){
+  const original = await readFileAsDataURL(file);
+  try{
+    const img = await loadImageEl(original);
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if(iw && ih){
+      const scale = Math.min(1, OCR_MAX_SIDE / Math.max(iw, ih));
+      const cw = Math.max(1, Math.round(iw*scale)), ch = Math.max(1, Math.round(ih*scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cw,ch);
+      ctx.drawImage(img, 0, 0, cw, ch);
+      const out = canvas.toDataURL('image/jpeg', OCR_JPEG_QUALITY);
+      if(out.startsWith('data:image/jpeg') && out.length < original.length){
+        return { dataUrl: out, mimeType: 'image/jpeg' };
+      }
+    }
+  }catch(e){ /* không thu nhỏ được thì gửi ảnh gốc */ }
+  return { dataUrl: original, mimeType: file.type || 'image/jpeg' };
+}
+
+async function processImageFile(file){
   if(!file || !file.type || !file.type.startsWith('image/')) return;
   const previewImg = document.getElementById('previewImg');
-  const reader = new FileReader();
-  reader.onload = async ()=>{
-    previewImg.src = reader.result;
+  try{
+    const { dataUrl, mimeType } = await prepareImage(file);
+    previewImg.src = dataUrl;
     previewImg.classList.remove('hidden');
-    const base64 = reader.result.split(',')[1];
-    await runOCR(base64, file.type || 'image/jpeg', file.name || 'ảnh');
-  };
-  reader.readAsDataURL(file);
+    await runOCR(dataUrl.split(',')[1], mimeType, file.name || 'ảnh');
+  }catch(err){
+    document.getElementById('ocrStatus').innerHTML = `<div class="err">Lỗi: ${err.message}</div>`;
+  }
 }
 
 document.getElementById('btnCamera').addEventListener('click', ()=>{
@@ -1117,62 +1331,130 @@ Mỗi phần tử JSON có dạng:
 {"code": "mã/ký hiệu nếu có, không thì để rỗng", "w": số (dài, mm), "h": số (rộng, mm), "qty": số lượng, "ghichu": "màu kính / loại kính / yêu cầu mài cạnh nếu có, không thì để rỗng"}`;
 }
 
-// Gemini's free tier model occasionally answers "currently experiencing high demand" —
-// Google's own wording says these spikes are usually short-lived, so it is worth a few
-// automatic retries with a growing pause before bothering the user with a manual retry.
-function isOverloadError(status, msg){
-  if(status===503 || status===429) return true;
-  return /overloaded|high demand|unavailable/i.test(String(msg||''));
-}
+/* ---- Gọi Gemini: tự đổi model khi quá tải / chậm ----
+   Chế độ Nhanh: ưu tiên model Flash-Lite (nhẹ, ít bị quá tải) và giảm "suy nghĩ" xuống mức thấp nhất.
+   Chế độ Kỹ: ưu tiên model Flash mới nhất (như bản cũ), vẫn tự chuyển sang model khác nếu quá tải. */
+const OCR_MODELS = {
+  fast:     ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-flash-latest'],
+  accurate: ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest']
+};
+const OCR_TIMEOUT_MS = { fast: 20000, accurate: 60000 };   // quá thời gian này thì bỏ, chuyển model khác
+const OCR_TOTAL_MS   = { fast: 90000, accurate: 180000 };  // tổng thời gian tối đa cho 1 ảnh
+const THINK_LEVELS = ['minimal', 'low', 'none'];
+const deadModels = new Set();   // model không tồn tại / không dùng được với key này (chỉ nhớ trong phiên)
+
+function loadThinkCfg(){ try{ return JSON.parse(localStorage.getItem(LS_KEYS.thinkCfg)) || {}; }catch(e){ return {}; } }
+function saveThinkCfg(cfg){ try{ localStorage.setItem(LS_KEYS.thinkCfg, JSON.stringify(cfg)); }catch(e){} }
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-async function callGemini(prompt, base64, mimeType, apiKey){
-  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
-      contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type: mimeType, data: base64}} ] }],
-      generationConfig:{ responseMimeType:'application/json' }
-    })
-  });
-  const data = await resp.json();
-  if(!resp.ok){
-    const err = new Error(data?.error?.message || 'Lỗi gọi Gemini API');
-    err.status = resp.status;
-    throw err;
+async function geminiOnce(model, apiKey, prompt, base64, mimeType, thinkLevel, timeoutMs){
+  const generationConfig = { responseMimeType:'application/json' };
+  if(thinkLevel && thinkLevel !== 'none') generationConfig.thinkingConfig = { thinkingLevel: thinkLevel };
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type: mimeType, data: base64}} ] }],
+        generationConfig
+      }),
+      signal: ctrl.signal
+    });
+    let data = null;
+    try{ data = await resp.json(); }catch(e){}
+    if(!resp.ok) return { ok:false, status:resp.status, message: data?.error?.message || `HTTP ${resp.status}` };
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.filter(p=>!p.thought && typeof p.text === 'string').map(p=>p.text).join('');
+    if(!text) return { ok:false, status:0, message:'Không nhận được kết quả từ Gemini.' };
+    return { ok:true, text };
+  }catch(err){
+    const timedOut = err && err.name === 'AbortError';
+    return { ok:false, status:0, message: timedOut ? `quá ${Math.round(timeoutMs/1000)}s không trả lời` : 'lỗi mạng' };
+  }finally{
+    clearTimeout(timer);
   }
-  return data;
+}
+
+function parseOcrJson(text){
+  const cleaned = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'');
+  const arr = JSON.parse(cleaned);
+  if(!Array.isArray(arr)) throw new Error('not array');
+  return arr;
+}
+
+async function readWithFallback(apiKey, prompt, base64, mimeType, mode, onProgress){
+  const started = Date.now();
+  const cfg = loadThinkCfg();
+  let queue = OCR_MODELS[mode].filter(m=>!deadModels.has(m));
+  if(!queue.length){ deadModels.clear(); queue = OCR_MODELS[mode].slice(); }
+  let lastErr = '', overloaded = false;
+
+  for(let pass=1; pass<=2 && queue.length; pass++){
+    const retry = [];
+    for(const model of queue){
+      if(Date.now() - started > OCR_TOTAL_MS[mode]){ retry.length = 0; break; }
+      let level = mode === 'fast' ? (THINK_LEVELS.includes(cfg[model]) ? cfg[model] : 'minimal') : 'none';
+      while(true){
+        onProgress(model, pass);
+        const r = await geminiOnce(model, apiKey, prompt, base64, mimeType, level, OCR_TIMEOUT_MS[mode]);
+        if(r.ok){
+          let arr;
+          try{ arr = parseOcrJson(r.text); }
+          catch(e){ lastErr = `${model}: kết quả trả về không đúng định dạng`; retry.push(model); break; }
+          if(mode === 'fast' && cfg[model] !== level){ cfg[model] = level; saveThinkCfg(cfg); }
+          return { arr, model, seconds: Math.round((Date.now()-started)/100)/10 };
+        }
+        lastErr = `${model}: ${r.message}`;
+        if(r.status === 401 || (r.status === 400 && /api[ _-]?key/i.test(r.message))){
+          const e = new Error('API key không hợp lệ hoặc đã hết hạn — kiểm tra lại ở mục 1. (' + r.message + ')');
+          e.overloaded = false; throw e;
+        }
+        if(r.status === 400 && level !== 'none'){
+          level = THINK_LEVELS[THINK_LEVELS.indexOf(level) + 1];   // model không nhận mức này → thử mức kế
+          continue;
+        }
+        if(r.status === 400 || r.status === 403 || r.status === 404){
+          deadModels.add(model);                                   // model không dùng được → bỏ qua hẳn
+        } else {
+          overloaded = true;                                       // 429 / 5xx / quá giờ / lỗi mạng → thử lại sau
+          retry.push(model);
+        }
+        break;
+      }
+    }
+    queue = retry;
+    if(queue.length && pass < 2) await sleep(1500);
+  }
+  const e = new Error((overloaded
+    ? 'Google đang quá tải hoặc mạng chậm — đã thử hết các model dự phòng mà chưa được. Đợi 1-2 phút rồi bấm thử lại.'
+    : 'Không đọc được ảnh bằng model nào.') + (lastErr ? ` (Chi tiết: ${lastErr})` : ''));
+  e.overloaded = overloaded;
+  throw e;
 }
 
 async function runOCR(base64, mimeType, imageLabel){
   const statusEl = document.getElementById('ocrStatus');
-  statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Đang đọc số đo từ ảnh...</div>`;
   const apiKey = loadApiKey();
-  const learningContext = learningGetContext();
-  const prompt = buildPrompt(learningContext);
+  const mode = document.getElementById('ocrModeSelect').value === 'accurate' ? 'accurate' : 'fast';
+  const prompt = buildPrompt(learningGetContext());
+
+  const t0 = Date.now();
+  const cur = { model:'', pass:1 };
+  const renderProgress = ()=>{
+    statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Đang đọc số đo từ ảnh... ${Math.round((Date.now()-t0)/1000)}s` +
+      (cur.model ? ` — ${cur.model}` : '') + (cur.pass > 1 ? ' (thử lại)' : '') + `</div>`;
+  };
+  renderProgress();
+  const ticker = setInterval(renderProgress, 1000);
 
   try{
-    const MAX_TRY = 4, DELAYS = [1500, 3000, 6000];
-    let data;
-    for(let attempt=0; ; attempt++){
-      try{
-        data = await callGemini(prompt, base64, mimeType, apiKey);
-        break;
-      }catch(err){
-        if(attempt < MAX_TRY-1 && isOverloadError(err.status, err.message)){
-          statusEl.innerHTML = `<div class="muted"><span class="spinner"></span> Model Gemini đang quá tải, tự thử lại (${attempt+1}/${MAX_TRY-1})...</div>`;
-          await sleep(DELAYS[attempt] || 6000);
-          continue;
-        }
-        throw err;
-      }
-    }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if(!text) throw new Error('Không nhận được kết quả từ Gemini.');
-    let cleaned = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'');
-    const arr = JSON.parse(cleaned);
-    if(!Array.isArray(arr) || arr.length===0){
-      statusEl.innerHTML = `<div class="warn">Không đọc được dòng nào. Thử chụp lại ảnh rõ hơn.</div>`;
+    const { arr, model, seconds } = await readWithFallback(apiKey, prompt, base64, mimeType, mode,
+      (m, pass)=>{ cur.model = m; cur.pass = pass; renderProgress(); });
+    clearInterval(ticker);
+    if(arr.length===0){
+      statusEl.innerHTML = `<div class="warn">Không đọc được dòng nào. Thử chụp lại ảnh rõ hơn${mode==='fast' ? ', hoặc đổi sang chế độ "Kỹ"' : ''}.</div>`;
       return;
     }
     const batchId = state.nextBatchId++;
@@ -1192,14 +1474,11 @@ async function runOCR(base64, mimeType, imageLabel){
     });
     saveDemand();
     renderDemandTable();
-    statusEl.innerHTML = `<div class="ok">Đã đọc thêm ${arr.length} dòng. Kiểm tra lại bảng bên dưới, sửa nếu cần — mỗi chỗ anh sửa sẽ giúp AI đọc chính xác hơn ở lần sau.</div>`;
+    statusEl.innerHTML = `<div class="ok">Đã đọc thêm ${arr.length} dòng trong ${seconds}s. Kiểm tra lại bảng bên dưới, sửa nếu cần — mỗi chỗ anh sửa sẽ giúp AI đọc chính xác hơn ở lần sau.<br><span class="muted">Model: ${model}</span></div>`;
   }catch(err){
-    const overloaded = isOverloadError(err.status, err.message);
-    const msg = overloaded
-      ? 'Model Gemini đang quá tải, đã tự thử lại vài lần nhưng chưa được. Đợi một chút rồi bấm thử lại.'
-      : `Lỗi: ${err.message}`;
-    statusEl.innerHTML = `<div class="err">${msg}</div>`;
-    if(overloaded){
+    clearInterval(ticker);
+    statusEl.innerHTML = `<div class="err">${err.overloaded === undefined ? 'Lỗi: ' : ''}${err.message}</div>`;
+    if(err.overloaded){
       const btn = document.createElement('button');
       btn.className = 'btn secondary small';
       btn.style.marginTop = '8px';
@@ -2555,6 +2834,7 @@ renderLearningStats();
 renderStockTable();
 renderDemandTable();
 renderOffcutRuleHint();
+renderQuickPreview();
 </script>
 
 
